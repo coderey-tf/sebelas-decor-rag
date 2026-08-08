@@ -1,0 +1,702 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sebelas Decor — Chat Assistant</title>
+    <meta
+      name="description"
+      content="Asisten virtual Sebelas Decor — jasa dekorasi event pernikahan, lamaran, dan acara spesial."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      /* ========================================
+           CSS RESET & VARIABLES
+           ======================================== */
+      *,
+      *::before,
+      *::after {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      :root {
+        --bg-app: #0b141a;
+        --bg-chat: #0b141a;
+        --bg-header: #1f2c34;
+        --bg-input-area: #1f2c34;
+        --bg-bubble-user: #005c4b;
+        --bg-bubble-bot: #1f2c34;
+        --text-primary: #e9edef;
+        --text-secondary: #8696a0;
+        --text-bubble: #e9edef;
+        --accent-green: #00a884;
+        --accent-green-hover: #00c49a;
+        --border-color: #2a373f;
+        --shadow-soft: 0 1px 3px rgba(0, 0, 0, 0.3);
+        --radius-bubble: 10px;
+        --radius-input: 12px;
+        --transition-fast: 0.2s ease;
+        --transition-normal: 0.3s ease;
+        --font-main:
+          "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        --max-chat-width: 820px;
+      }
+
+      html,
+      body {
+        height: 100%;
+        font-family: var(--font-main);
+        background: var(--bg-app);
+        color: var(--text-primary);
+        overflow: hidden;
+      }
+
+      /* ========================================
+           APP LAYOUT
+           ======================================== */
+      .app-container {
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+        max-width: var(--max-chat-width);
+        margin: 0 auto;
+        background: var(--bg-chat);
+        position: relative;
+      }
+
+      /* ========================================
+           HEADER
+           ======================================== */
+      .chat-header {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 12px 18px;
+        background: var(--bg-header);
+        border-bottom: 1px solid var(--border-color);
+        z-index: 10;
+        flex-shrink: 0;
+      }
+
+      .header-avatar {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #00a884, #005c4b);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 20px;
+        flex-shrink: 0;
+        box-shadow: 0 2px 8px rgba(0, 168, 132, 0.3);
+      }
+
+      .header-info {
+        flex: 1;
+        min-width: 0;
+      }
+
+      .header-name {
+        font-size: 16px;
+        font-weight: 600;
+        color: var(--text-primary);
+        line-height: 1.3;
+      }
+
+      .header-status {
+        font-size: 12.5px;
+        color: var(--accent-green);
+        display: flex;
+        align-items: center;
+        gap: 5px;
+      }
+
+      .status-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--accent-green);
+        animation: pulse-dot 2s infinite;
+      }
+
+      @keyframes pulse-dot {
+        0%,
+        100% {
+          opacity: 1;
+          transform: scale(1);
+        }
+        50% {
+          opacity: 0.5;
+          transform: scale(0.85);
+        }
+      }
+
+      /* ========================================
+           CHAT BODY
+           ======================================== */
+      .chat-body {
+        flex: 1;
+        overflow-y: auto;
+        padding: 16px 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.015'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+      }
+
+      .chat-body::-webkit-scrollbar {
+        width: 6px;
+      }
+      .chat-body::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      .chat-body::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.12);
+        border-radius: 3px;
+      }
+
+      /* ========================================
+           CHAT BUBBLES
+           ======================================== */
+      .message-row {
+        display: flex;
+        animation: msg-in 0.3s ease-out;
+      }
+
+      .message-row.user {
+        justify-content: flex-end;
+      }
+
+      .message-row.bot {
+        justify-content: flex-start;
+      }
+
+      @keyframes msg-in {
+        from {
+          opacity: 0;
+          transform: translateY(10px) scale(0.97);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0) scale(1);
+        }
+      }
+
+      .bubble {
+        max-width: 75%;
+        padding: 9px 14px 8px;
+        border-radius: var(--radius-bubble);
+        font-size: 14.2px;
+        line-height: 1.55;
+        color: var(--text-bubble);
+        position: relative;
+        word-wrap: break-word;
+        white-space: pre-wrap;
+        box-shadow: var(--shadow-soft);
+      }
+
+      .message-row.user .bubble {
+        background: var(--bg-bubble-user);
+        border-top-right-radius: 3px;
+      }
+
+      .message-row.bot .bubble {
+        background: var(--bg-bubble-bot);
+        border-top-left-radius: 3px;
+        border: 1px solid var(--border-color);
+      }
+
+      .bubble .timestamp {
+        display: block;
+        text-align: right;
+        font-size: 11px;
+        color: var(--text-secondary);
+        margin-top: 4px;
+        opacity: 0.8;
+      }
+
+      /* ========================================
+           TYPING INDICATOR
+           ======================================== */
+      .typing-indicator {
+        display: none;
+        justify-content: flex-start;
+        animation: msg-in 0.3s ease-out;
+      }
+
+      .typing-indicator.active {
+        display: flex;
+      }
+
+      .typing-bubble {
+        background: var(--bg-bubble-bot);
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-bubble);
+        border-top-left-radius: 3px;
+        padding: 12px 18px;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        box-shadow: var(--shadow-soft);
+      }
+
+      .typing-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--text-secondary);
+        animation: typing-bounce 1.4s infinite ease-in-out;
+      }
+
+      .typing-dot:nth-child(2) {
+        animation-delay: 0.16s;
+      }
+      .typing-dot:nth-child(3) {
+        animation-delay: 0.32s;
+      }
+
+      @keyframes typing-bounce {
+        0%,
+        60%,
+        100% {
+          transform: translateY(0);
+          opacity: 0.4;
+        }
+        30% {
+          transform: translateY(-6px);
+          opacity: 1;
+        }
+      }
+
+      /* ========================================
+           DATE SEPARATOR
+           ======================================== */
+      .date-separator {
+        display: flex;
+        justify-content: center;
+        margin: 12px 0;
+      }
+
+      .date-separator span {
+        background: #1a2930;
+        color: var(--text-secondary);
+        font-size: 12px;
+        padding: 5px 16px;
+        border-radius: 8px;
+        box-shadow: var(--shadow-soft);
+      }
+
+      /* ========================================
+           QUICK REPLIES
+           ======================================== */
+      .quick-replies {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        padding: 8px 20px 4px;
+        flex-shrink: 0;
+      }
+
+      .quick-reply-btn {
+        background: transparent;
+        border: 1px solid var(--accent-green);
+        color: var(--accent-green);
+        padding: 7px 16px;
+        border-radius: 20px;
+        font-size: 13px;
+        font-family: var(--font-main);
+        cursor: pointer;
+        transition: all var(--transition-fast);
+        white-space: nowrap;
+      }
+
+      .quick-reply-btn:hover {
+        background: var(--accent-green);
+        color: #fff;
+        transform: translateY(-1px);
+        box-shadow: 0 3px 12px rgba(0, 168, 132, 0.3);
+      }
+
+      .quick-reply-btn:active {
+        transform: scale(0.96);
+      }
+
+      /* ========================================
+           INPUT AREA
+           ======================================== */
+      .input-area {
+        display: flex;
+        align-items: flex-end;
+        gap: 10px;
+        padding: 12px 16px 14px;
+        background: var(--bg-input-area);
+        border-top: 1px solid var(--border-color);
+        flex-shrink: 0;
+      }
+
+      .input-wrapper {
+        flex: 1;
+        position: relative;
+      }
+
+      #user-input {
+        width: 100%;
+        background: #2a3942;
+        border: none;
+        border-radius: var(--radius-input);
+        padding: 11px 16px;
+        font-size: 14.5px;
+        font-family: var(--font-main);
+        color: var(--text-primary);
+        outline: none;
+        resize: none;
+        max-height: 120px;
+        line-height: 1.45;
+        transition: box-shadow var(--transition-fast);
+      }
+
+      #user-input::placeholder {
+        color: var(--text-secondary);
+      }
+
+      #user-input:focus {
+        box-shadow: 0 0 0 2px rgba(0, 168, 132, 0.25);
+      }
+
+      #send-btn {
+        width: 46px;
+        height: 46px;
+        border-radius: 50%;
+        background: var(--accent-green);
+        border: none;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all var(--transition-fast);
+        flex-shrink: 0;
+      }
+
+      #send-btn:hover {
+        background: var(--accent-green-hover);
+        transform: scale(1.06);
+        box-shadow: 0 4px 14px rgba(0, 168, 132, 0.35);
+      }
+
+      #send-btn:active {
+        transform: scale(0.94);
+      }
+
+      #send-btn:disabled {
+        background: #2a3942;
+        cursor: not-allowed;
+        transform: none;
+        box-shadow: none;
+      }
+
+      #send-btn svg {
+        width: 22px;
+        height: 22px;
+        fill: #fff;
+      }
+
+      /* ========================================
+           RESPONSIVE
+           ======================================== */
+      @media (max-width: 480px) {
+        .chat-body {
+          padding: 12px 10px;
+        }
+        .bubble {
+          max-width: 88%;
+          font-size: 14px;
+        }
+        .quick-replies {
+          padding: 8px 10px 4px;
+        }
+      }
+
+      /* ========================================
+           WELCOME MESSAGE
+           ======================================== */
+      .welcome-card {
+        background: linear-gradient(135deg, #005c4b 0%, #00382e 100%);
+        border-radius: 14px;
+        padding: 22px;
+        margin-bottom: 8px;
+        text-align: center;
+        border: 1px solid rgba(0, 168, 132, 0.2);
+        animation: msg-in 0.5s ease-out;
+      }
+
+      .welcome-card .welcome-emoji {
+        font-size: 36px;
+        margin-bottom: 10px;
+      }
+
+      .welcome-card h2 {
+        font-size: 17px;
+        font-weight: 600;
+        margin-bottom: 6px;
+        color: #e9edef;
+      }
+
+      .welcome-card p {
+        font-size: 13.5px;
+        color: #8696a0;
+        line-height: 1.5;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app-container">
+      <!-- HEADER -->
+      <div class="chat-header">
+        <div class="header-avatar">🌸</div>
+        <div class="header-info">
+          <div class="header-name">Sebelas Decor</div>
+          <div class="header-status">
+            <span class="status-dot"></span>
+            Online — siap membantu
+          </div>
+        </div>
+      </div>
+
+      <!-- CHAT BODY -->
+      <div class="chat-body" id="chat-body">
+        <!-- Date Separator -->
+        <div class="date-separator">
+          <span id="date-today">Hari ini</span>
+        </div>
+
+        <!-- Welcome Card -->
+        <div class="welcome-card">
+          <div class="welcome-emoji">🌸✨</div>
+          <h2>Halo! Selamat datang di Sebelas Decor</h2>
+          <p>
+            Saya asisten virtual yang siap membantu Anda dengan informasi paket
+            dekorasi, tema, harga, dan FAQ seputar layanan kami.
+          </p>
+        </div>
+
+        <!-- Bot Welcome Message -->
+        <div class="message-row bot">
+          <div class="bubble">
+            Silakan ketik pertanyaan Anda, atau pilih salah satu topik di bawah!
+            👇<span class="timestamp" data-auto-time="true"></span>
+          </div>
+        </div>
+
+        <!-- Typing Indicator -->
+        <div class="typing-indicator" id="typing-indicator">
+          <div class="typing-bubble">
+            <div class="typing-dot"></div>
+            <div class="typing-dot"></div>
+            <div class="typing-dot"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- QUICK REPLIES -->
+      <!-- <div class="quick-replies" id="quick-replies">
+            <button class="quick-reply-btn" data-msg="Halo, boleh minta pricelist dekorasinya?">📦 Minta Pricelist</button>
+            <button class="quick-reply-btn" data-msg="Untuk acara Wedding di Jakarta tanggal 15 Oktober">💒 Wedding / Pernikahan</button>
+            <button class="quick-reply-btn" data-msg="Untuk acara Engagement di Bandung tanggal 20 September">💍 Engagement / Lamaran</button>
+            <button class="quick-reply-btn" data-msg="Bagaimana ketentuan DP dan revisi?">💳 Info DP & Revisi</button>
+            <button class="quick-reply-btn" data-msg="Ada pilihan tema apa saja?">🎨 Katalog Tema</button>
+        </div> -->
+
+      <!-- INPUT AREA -->
+      <div class="input-area">
+        <div class="input-wrapper">
+          <textarea
+            id="user-input"
+            rows="1"
+            placeholder="Ketik pesan Anda..."
+            autocomplete="off"
+          ></textarea>
+        </div>
+        <button id="send-btn" aria-label="Kirim pesan">
+          <svg viewBox="0 0 24 24">
+            <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <script>
+      // ============================================
+      //  Sebelas Decor Chat — Frontend Logic
+      // ============================================
+      const API_URL = "http://127.0.0.1:5000/api/chat";
+
+      const chatBody = document.getElementById("chat-body");
+      const userInput = document.getElementById("user-input");
+      const sendBtn = document.getElementById("send-btn");
+      const typingIndicator = document.getElementById("typing-indicator");
+      const quickReplies = document.getElementById("quick-replies");
+      const dateLabel = document.getElementById("date-today");
+
+      // Dynamic Chat History untuk Multi-turn Session Memory
+      const chatHistory = [];
+
+      // --- Set tanggal hari ini ---
+      const today = new Date();
+      const options = {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      };
+      dateLabel.textContent = today.toLocaleDateString("id-ID", options);
+
+      // --- Set waktu pada welcome bubble ---
+      document.querySelectorAll('[data-auto-time="true"]').forEach((el) => {
+        el.textContent = getCurrentTime();
+      });
+
+      // --- Utilitas ---
+      function getCurrentTime() {
+        return new Date().toLocaleTimeString("id-ID", {
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+      }
+
+      function scrollToBottom() {
+        requestAnimationFrame(() => {
+          chatBody.scrollTop = chatBody.scrollHeight;
+        });
+      }
+
+      function setLoading(state) {
+        sendBtn.disabled = state;
+        userInput.disabled = state;
+        typingIndicator.classList.toggle("active", state);
+        if (state) scrollToBottom();
+      }
+
+      // --- Tambah bubble pesan ---
+      function addMessage(text, sender) {
+        const row = document.createElement("div");
+        row.className = `message-row ${sender}`;
+
+        const bubble = document.createElement("div");
+        bubble.className = "bubble";
+
+        // Format Markdown Image: ![alt](url) -> <img> tag
+        let formatted = text.replace(
+          /!\[(.*?)\]\((.*?)\)/g,
+          (match, alt, url) => {
+            return `<div style="margin: 8px 0;"><img src="${url}" alt="${alt}" style="max-width: 100%; max-height: 280px; border-radius: 10px; display: block; box-shadow: 0 4px 12px rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1);" onload="scrollToBottom()"></div>`;
+          },
+        );
+
+        // Format URL https:// -> <a> clickable link
+        formatted = formatted.replace(
+          /(https:\/\/[\w\.\/\?\=\&\_\-%]+)/g,
+          (url) => {
+            return `<a href="${url}" target="_blank" style="color: #53bdeb; text-decoration: underline; word-break: break-all;">${url}</a>`;
+          },
+        );
+
+        // Format teks lainnya: bold, bullet points, newlines
+        formatted = formatted
+          .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
+          .replace(/\n- /g, "\n• ")
+          .replace(/\n/g, "<br>");
+
+        bubble.innerHTML = `${formatted}<span class="timestamp">${getCurrentTime()}</span>`;
+        row.appendChild(bubble);
+
+        // Sisipkan sebelum typing indicator
+        chatBody.insertBefore(row, typingIndicator);
+        scrollToBottom();
+      }
+
+      // --- Kirim pesan ke API ---
+      async function sendMessage(message) {
+        if (!message.trim()) return;
+
+        const textToSend = message.trim();
+        addMessage(textToSend, "user");
+        userInput.value = "";
+        autoResizeTextarea();
+        setLoading(true);
+
+        // Simpan percakapan user ke history
+        chatHistory.push({ role: "user", content: textToSend });
+
+        try {
+          const response = await fetch(API_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              message: textToSend,
+              history: chatHistory,
+            }),
+          });
+
+          if (!response.ok) {
+            throw new Error(`Server error: ${response.status}`);
+          }
+
+          const data = await response.json();
+          const reply =
+            data.reply || "Maaf, saya tidak mendapatkan jawaban saat ini. 🙏";
+
+          // Simpan balasan bot ke history
+          chatHistory.push({ role: "assistant", content: reply });
+
+          setLoading(false);
+          addMessage(reply, "bot");
+        } catch (error) {
+          console.error("Fetch error:", error);
+          setLoading(false);
+          addMessage(
+            "⚠️ Maaf, tidak dapat terhubung ke server. Pastikan server Flask sudah berjalan di http://127.0.0.1:5000",
+            "bot",
+          );
+        }
+      }
+
+      // --- Auto-resize textarea ---
+      function autoResizeTextarea() {
+        userInput.style.height = "auto";
+        userInput.style.height = Math.min(userInput.scrollHeight, 120) + "px";
+      }
+
+      // --- Event Listeners ---
+      sendBtn.addEventListener("click", () => {
+        sendMessage(userInput.value);
+      });
+
+      userInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && !e.shiftKey) {
+          e.preventDefault();
+          sendMessage(userInput.value);
+        }
+      });
+
+      userInput.addEventListener("input", autoResizeTextarea);
+
+      // Quick reply buttons
+      quickReplies.addEventListener("click", (e) => {
+        const btn = e.target.closest(".quick-reply-btn");
+        if (btn) {
+          sendMessage(btn.dataset.msg);
+        }
+      });
+
+      // --- Focus input on load ---
+      userInput.focus();
+    </script>
+  </body>
+</html>

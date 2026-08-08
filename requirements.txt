@@ -1,0 +1,10 @@
+flask
+flask-cors
+chromadb
+sentence-transformers
+langchain
+langchain-community
+langchain-text-splitters
+python-dotenv
+requests
+psycopg2-binary
