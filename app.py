@@ -111,21 +111,41 @@ def chat():
                 "reply": "Halo! Ada yang bisa Sebelas Decor bantu? 😊"
             })
 
-        # Panggil RAG engine dengan history
-        reply = query_rag(user_message, history=history)
-
-        # ── Akumulasi data lead dari seluruh percakapan ──
-        from db_client import extract_lead_from_conversation
-        lead_info = extract_lead_from_conversation(
+        # ── 1. Cek Kunci Unik WhatsApp (phone / wa_id) di DB ──
+        from db_client import get_lead_by_phone, extract_lead_from_conversation
+        
+        # Ekstrak No HP (Unique Key) dari input Meta API atau teks chat
+        lead_info_pre = extract_lead_from_conversation(
             current_message=user_message,
             history=history,
             wa_name=customer_name,
             wa_phone=phone_input,
         )
+        phone = phone_input or lead_info_pre.get("phone")
+
+        # Cek apakah lead dengan nomor HP ini sudah ada di DB
+        existing_lead = get_lead_by_phone(phone) if phone else None
+
+        # Jika lead SUDAH DILANJUTKAN KE ADMIN (Status: FollowUp, Booked, DpPaid, Completed)
+        # -> NONAKTIFKAN AUTO-REPLY BOT agar Admin yang meneruskan percakapan!
+        if existing_lead and existing_lead.get("status") in ["FollowUp", "Follow-up", "Booked", "DpPaid", "DP Paid", "Completed"]:
+            return jsonify({
+                "reply": "Terima kasih! Pesan Kakak sudah kami teruskan ke Admin Sebelas Decor. Admin kami akan segera membalas percakapan ini secara langsung ya Kak. 😊",
+                "autoReply": False,
+                "handoverToAdmin": True,
+                "leadSaved": False,
+                "leadData": existing_lead
+            })
+
+        # Panggil RAG engine dengan history
+        reply = query_rag(user_message, history=history)
+
+        # ── 2. Akumulasi data lead dari seluruh percakapan ──
+        lead_info = lead_info_pre
 
         lead_saved = False
 
-        # Auto-insert lead ke database saat 3 filter lengkap
+        # Auto-upsert lead ke database saat 4 filter lengkap
         if lead_info.get("is_complete"):
             # Tentukan nama pelanggan
             name = lead_info.get("customer_name")

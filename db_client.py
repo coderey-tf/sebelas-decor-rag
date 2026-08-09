@@ -34,6 +34,29 @@ def get_db_connection():
     return psycopg2.connect(db_url)
 
 
+def get_lead_by_phone(phone: str) -> dict:
+    """Mengambil data lead berdasarkan nomor HP (unique key WhatsApp) jika sudah ada."""
+    if not phone:
+        return None
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor.execute("""
+            SELECT id, customer_name, phone, event_date, location, event_type, package, status, notes, created_at
+            FROM leads
+            WHERE phone = %s;
+        """, (phone,))
+        lead = cursor.fetchone()
+        return dict(lead) if lead else None
+    except Exception as e:
+        print(f"❌ [DB Error get_lead_by_phone]: {e}")
+        return None
+    finally:
+        if conn:
+            conn.close()
+
+
 def save_lead(
     customer_name: str,
     phone: str = None,
@@ -47,16 +70,29 @@ def save_lead(
     source: str = "chatbot"
 ) -> dict:
     """
-    Menyimpan lead baru ke tabel 'leads' dan mencatat aktivitas di 'activity_logs'.
+    Menyimpan atau meng-update (UPSERT) lead berdasarkan nomor HP (phone)
+    agar tidak terjadi duplicate leads di database Supabase.
     """
     conn = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor(cursor_factory=RealDictCursor)
         
-        lead_id = str(uuid.uuid4())
         now = datetime.utcnow()
         
+        # Validasi & Mapping Enum LeadStatus untuk PostgreSQL
+        STATUS_MAP = {
+            "Inquiry": "Inquiry",
+            "FollowUp": "Follow-up",
+            "Follow-up": "Follow-up",
+            "Booked": "Booked",
+            "DpPaid": "DP Paid",
+            "DP Paid": "DP Paid",
+            "Completed": "Completed",
+            "Cancelled": "Cancelled"
+        }
+        db_status = STATUS_MAP.get(status, "Inquiry")
+
         # Validasi enum EventType
         valid_event_types = ["Wedding", "Engagement", "Birthday", "Other"]
         if event_type not in valid_event_types:
@@ -67,60 +103,111 @@ def save_lead(
         if event_date:
             try:
                 if isinstance(event_date, str):
-                    # coba format YYYY-MM-DD
                     parsed_date = datetime.strptime(event_date[:10], "%Y-%m-%d").date()
                 elif isinstance(event_date, datetime):
                     parsed_date = event_date.date()
             except Exception:
                 parsed_date = None
 
-        insert_lead_query = """
-        INSERT INTO leads (
-            id, customer_name, phone, event_date, location, event_type,
-            package, theme, status, notes, source, created_at, updated_at
-        ) VALUES (
-            %s, %s, %s, %s, %s, %s::"EventType", %s, %s, %s::"LeadStatus", %s, %s, %s, %s
-        )
-        RETURNING id, customer_name, phone, event_type, status, created_at;
-        """
-        
-        cursor.execute(insert_lead_query, (
-            lead_id,
-            customer_name,
-            phone,
-            parsed_date,
-            location,
-            event_type,
-            package,
-            theme,
-            status,
-            notes,
-            source,
-            now,
-            now
-        ))
-        
-        new_lead = cursor.fetchone()
-        
-        # Tambah Activity Log
-        activity_id = str(uuid.uuid4())
-        insert_log_query = """
-        INSERT INTO activity_logs (
-            id, lead_id, action, details, performed_by, created_at
-        ) VALUES (%s, %s, %s, %s, %s, %s);
-        """
-        cursor.execute(insert_log_query, (
-            activity_id,
-            lead_id,
-            "Lead Created",
-            f"Lead baru berhasil ditangkap otomatis oleh Chatbot AI (Sumber: {source})",
-            "chatbot",
-            now
-        ))
-        
-        conn.commit()
-        print(f"✅ [DB] Lead berhasil disimpan: {customer_name} (ID: {lead_id})")
-        return dict(new_lead)
+        # ── Cek apakah lead dengan nomor HP ini sudah ada ──
+        existing_lead = None
+        if phone:
+            cursor.execute("SELECT id, status, customer_name FROM leads WHERE phone = %s;", (phone,))
+            existing_lead = cursor.fetchone()
+
+        if existing_lead:
+            # ── UPDATE (Mencegah Double Lead) ──
+            lead_id = existing_lead["id"]
+            update_query = """
+            UPDATE leads SET
+                customer_name = COALESCE(%s, customer_name),
+                event_date = COALESCE(%s, event_date),
+                location = COALESCE(%s, location),
+                event_type = %s::"EventType",
+                package = COALESCE(%s, package),
+                theme = COALESCE(%s, theme),
+                notes = COALESCE(%s, notes),
+                source = %s,
+                updated_at = %s
+            WHERE id = %s
+            RETURNING id, customer_name, phone, event_type, status, created_at;
+            """
+            cursor.execute(update_query, (
+                customer_name,
+                parsed_date,
+                location,
+                event_type,
+                package,
+                theme,
+                notes,
+                source,
+                now,
+                lead_id
+            ))
+            updated_lead = cursor.fetchone()
+
+            # Activity Log Update
+            activity_id = str(uuid.uuid4())
+            cursor.execute("""
+                INSERT INTO activity_logs (id, lead_id, action, details, performed_by, created_at)
+                VALUES (%s, %s, %s, %s, %s, %s);
+            """, (
+                activity_id,
+                lead_id,
+                "Lead Updated",
+                f"Data lead di-update otomatis oleh Chatbot AI (Paket: {package or '-'})",
+                "chatbot",
+                now
+            ))
+            conn.commit()
+            print(f"🔄 [DB] Lead di-update (Upsert): {customer_name or existing_lead['customer_name']} (ID: {lead_id})")
+            return dict(updated_lead)
+
+        else:
+            # ── INSERT Lead Baru ──
+            lead_id = str(uuid.uuid4())
+            insert_lead_query = """
+            INSERT INTO leads (
+                id, customer_name, phone, event_date, location, event_type,
+                package, theme, status, notes, source, created_at, updated_at
+            ) VALUES (
+                %s, %s, %s, %s, %s, %s::"EventType", %s, %s, %s::"LeadStatus", %s, %s, %s, %s
+            )
+            RETURNING id, customer_name, phone, event_type, status, created_at;
+            """
+            cursor.execute(insert_lead_query, (
+                lead_id,
+                customer_name,
+                phone,
+                parsed_date,
+                location,
+                event_type,
+                package,
+                theme,
+                db_status,
+                notes,
+                source,
+                now,
+                now
+            ))
+            new_lead = cursor.fetchone()
+
+            # Activity Log Insert
+            activity_id = str(uuid.uuid4())
+            cursor.execute("""
+                INSERT INTO activity_logs (id, lead_id, action, details, performed_by, created_at)
+                VALUES (%s, %s, %s, %s, %s, %s);
+            """, (
+                activity_id,
+                lead_id,
+                "Lead Created",
+                f"Lead baru berhasil ditangkap otomatis oleh Chatbot AI (Sumber: {source})",
+                "chatbot",
+                now
+            ))
+            conn.commit()
+            print(f"✅ [DB] Lead baru disimpan: {customer_name} (ID: {lead_id})")
+            return dict(new_lead)
         
     except Exception as e:
         if conn:
@@ -183,7 +270,7 @@ def extract_lead_from_text(user_message: str) -> dict:
                 extracted['customer_name'] = raw_name.title()
 
     # Deteksi Jenis Acara
-    if any(k in msg_lower for k in ['nikah', 'wedding', 'resepsi', 'akad', 'menikah', 'pernikahan']):
+    if any(k in msg_lower for k in ['nikah', 'wedding', 'resepsi', 'akad', 'menikah', 'pernikahan','unduh mantu']):
         extracted['event_type'] = 'Wedding'
     elif any(k in msg_lower for k in ['lamaran', 'engagement', 'tunangan', 'melamar']):
         extracted['event_type'] = 'Engagement'
