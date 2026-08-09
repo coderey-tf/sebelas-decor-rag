@@ -156,32 +156,103 @@ def get_recent_leads(limit=10):
 
 def extract_lead_from_text(user_message: str) -> dict:
     """
-    Mendeteksi dan mengekstrak info kontak/event dari pesan user jika ada.
-    Contoh: nama, nomor HP, tanggal acara, lokasi, jenis acara.
+    Mendeteksi dan mengekstrak info kontak/event dari SATU pesan user.
     """
     extracted = {}
+    msg_lower = user_message.lower()
     
     # Deteksi No HP (misal: 0812..., 62812..., +62812...)
     phone_match = re.search(r'(\+?62|0)8[1-9][0-9]{7,10}', user_message)
     if phone_match:
         extracted['phone'] = phone_match.group(0)
-        
+
+    # Deteksi Nama ("nama saya Anisa", "saya Budi", "nama aku Maya")
+    name_match = re.search(r'(?:nama\s+(?:saya|aku)|saya|aku|perkenalkan)\s+([A-Za-z][A-Za-z\s]{1,30})', user_message, re.IGNORECASE)
+    if name_match:
+        extracted['customer_name'] = name_match.group(1).strip()
+
     # Deteksi Jenis Acara
-    msg_lower = user_message.lower()
-    if 'nikah' in msg_lower or 'wedding' in msg_lower or 'resepsi' in msg_lower or 'akad' in msg_lower:
+    if any(k in msg_lower for k in ['nikah', 'wedding', 'resepsi', 'akad', 'menikah', 'pernikahan']):
         extracted['event_type'] = 'Wedding'
-    elif 'lamaran' in msg_lower or 'engagement' in msg_lower or 'tunangan' in msg_lower:
+    elif any(k in msg_lower for k in ['lamaran', 'engagement', 'tunangan', 'melamar']):
         extracted['event_type'] = 'Engagement'
-    elif 'ulang tahun' in msg_lower or 'ultah' in msg_lower or 'birthday' in msg_lower or 'sweet 17' in msg_lower:
+    elif any(k in msg_lower for k in ['ulang tahun', 'ultah', 'birthday', 'sweet 17']):
         extracted['event_type'] = 'Birthday'
 
-    # Deteksi Tipe Lokasi (Gedung vs Rumah)
+    # Deteksi Tipe Venue (Gedung vs Rumah)
     if any(k in msg_lower for k in ['gedung', 'hotel', 'hall', 'ballroom', 'masjid', 'resto', 'restaurant', 'convention', 'aula']):
         extracted['venue_type'] = 'Gedung'
-    elif any(k in msg_lower for k in ['rumah', 'halaman', 'garasi', 'home', 'kediaman']):
+    elif any(k in msg_lower for k in ['rumah', 'halaman', 'garasi', 'home', 'kediaman', 'outdoor']):
         extracted['venue_type'] = 'Rumah'
 
+    # Deteksi Tanggal
+    parsed_date = parse_indonesian_date(user_message)
+    if parsed_date:
+        extracted['event_date'] = str(parsed_date)
+
+    # Deteksi Lokasi/Kota
+    location_keywords = [
+        'jakarta', 'bandung', 'surabaya', 'bekasi', 'tangerang', 'depok', 'bogor',
+        'semarang', 'yogyakarta', 'jogja', 'malang', 'solo', 'medan', 'makassar',
+        'bali', 'denpasar', 'palembang', 'batam', 'pekanbaru', 'manado',
+        'cibubur', 'bsd', 'serpong', 'pondok indah', 'kelapa gading', 'pik',
+        'kemang', 'cilandak', 'menteng', 'senayan', 'kuningan', 'sudirman',
+    ]
+    for loc in location_keywords:
+        if loc in msg_lower:
+            extracted['location'] = loc.title()
+            break
+
     return extracted
+
+
+def extract_lead_from_conversation(current_message: str, history: list = None, wa_name: str = None, wa_phone: str = None) -> dict:
+    """
+    Mengakumulasi data lead dari SELURUH percakapan (current message + history).
+    Mendukung Meta Cloud API fields (wa_name, wa_phone dari WhatsApp webhook).
+    
+    Returns dict dengan keys:
+        customer_name, phone, event_date, event_type, venue_type, location,
+        package (gabungan event_type + venue_type), is_complete (bool)
+    """
+    accumulated = {}
+
+    # 1. Scan semua pesan user dari history
+    if history and isinstance(history, list):
+        for msg in history:
+            if isinstance(msg, dict) and msg.get("role") == "user" and msg.get("content"):
+                partial = extract_lead_from_text(msg["content"])
+                # Merge: field baru menimpa yang lama (data terbaru menang)
+                for key, val in partial.items():
+                    if val:
+                        accumulated[key] = val
+
+    # 2. Scan pesan saat ini (prioritas tertinggi)
+    current_extracted = extract_lead_from_text(current_message)
+    for key, val in current_extracted.items():
+        if val:
+            accumulated[key] = val
+
+    # 3. Override dari Meta Cloud API (WhatsApp) jika ada
+    if wa_name and not accumulated.get('customer_name'):
+        accumulated['customer_name'] = wa_name
+    if wa_phone and not accumulated.get('phone'):
+        accumulated['phone'] = wa_phone
+
+    # 4. Generate package name (gabungan event_type + venue_type)
+    event_type = accumulated.get('event_type')
+    venue_type = accumulated.get('venue_type')
+    if event_type and venue_type:
+        accumulated['package'] = f"{event_type} {venue_type}"
+
+    # 5. Cek kelengkapan 3 filter wajib
+    accumulated['is_complete'] = all([
+        accumulated.get('event_date'),
+        accumulated.get('event_type'),
+        accumulated.get('venue_type'),
+    ])
+
+    return accumulated
 
 
 MONTH_NAMES = {

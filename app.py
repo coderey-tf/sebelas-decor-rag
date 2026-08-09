@@ -68,8 +68,16 @@ def simulation_page():
 def chat():
     """
     Endpoint utama untuk chat.
-    Menerima JSON: {"message": "...", "history": [...], "customerName": "...", "phone": "..."}
-    Mengembalikan JSON: {"reply": "...", "leadSaved": true/false}
+    Menerima JSON:
+      - message (str): pesan user
+      - history (list): riwayat chat [{role, content}, ...]
+      - customerName (str, optional): nama pelanggan (dari form / Meta Cloud API wa_name)
+      - phone (str, optional): nomor HP (dari form / Meta Cloud API wa_id)
+      - source (str, optional): "chatbot_web" | "whatsapp" (default: "chatbot_web")
+    Mengembalikan JSON:
+      - reply (str): balasan chatbot
+      - leadSaved (bool): apakah lead baru berhasil disimpan
+      - leadData (dict): data lead yang terkumpul sejauh ini
     """
     try:
         data = request.get_json()
@@ -82,8 +90,9 @@ def chat():
 
         user_message = data["message"].strip()
         history = data.get("history", [])
-        customer_name = data.get("customerName")
-        phone_input = data.get("phone")
+        customer_name = data.get("customerName")  # Dari Meta Cloud API: wa_profile_name
+        phone_input = data.get("phone")            # Dari Meta Cloud API: wa_id
+        source = data.get("source", "chatbot_web")
 
         if not user_message:
             return jsonify({
@@ -93,37 +102,50 @@ def chat():
         # Panggil RAG engine dengan history
         reply = query_rag(user_message, history=history)
 
-        # Otomatis deteksi & simpan lead ke database jika ada kontak atau nama
-        lead_saved = False
-        extracted = extract_lead_from_text(user_message)
-        phone = phone_input or extracted.get("phone")
-        event_type = extracted.get("event_type", "Other")
+        # ── Akumulasi data lead dari seluruh percakapan ──
+        from db_client import extract_lead_from_conversation
+        lead_info = extract_lead_from_conversation(
+            current_message=user_message,
+            history=history,
+            wa_name=customer_name,
+            wa_phone=phone_input,
+        )
 
-        if phone or customer_name or ("nama saya" in user_message.lower()):
-            name = customer_name
+        lead_saved = False
+
+        # Auto-insert lead ke database saat 3 filter lengkap
+        if lead_info.get("is_complete"):
+            # Tentukan nama pelanggan
+            name = lead_info.get("customer_name")
             if not name:
-                # Coba ambil nama sederhana dari text misal "nama saya Anisa"
-                import re
-                match = re.search(r'nama (saya|aku)\s+([A-Za-z\s]+)', user_message, re.IGNORECASE)
-                if match:
-                    name = match.group(2).strip()
-                else:
-                    name = f"Pengunjung Chatbot ({phone or 'Anonim'})"
+                phone_display = lead_info.get("phone", "Anonim")
+                name = f"Pelanggan Chatbot ({phone_display})"
 
             result = save_lead(
                 customer_name=name,
-                phone=phone,
-                event_type=event_type,
+                phone=lead_info.get("phone"),
+                event_date=lead_info.get("event_date"),
+                location=lead_info.get("location"),
+                event_type=lead_info.get("event_type", "Other"),
+                package=lead_info.get("package"),  # e.g. "Wedding Gedung"
                 status="Inquiry",
-                notes=f"Ditangkap otomatis dari chat: '{user_message}'",
-                source="chatbot"
+                notes=f"Auto-captured via {source}. Filter: {lead_info.get('package', '-')}, Tanggal: {lead_info.get('event_date', '-')}",
+                source=source,
             )
             if "error" not in result:
                 lead_saved = True
 
         return jsonify({
             "reply": reply,
-            "leadSaved": lead_saved
+            "leadSaved": lead_saved,
+            "leadData": {
+                "event_type": lead_info.get("event_type"),
+                "venue_type": lead_info.get("venue_type"),
+                "event_date": lead_info.get("event_date"),
+                "package": lead_info.get("package"),
+                "location": lead_info.get("location"),
+                "is_complete": lead_info.get("is_complete", False),
+            }
         })
 
     except Exception as e:
