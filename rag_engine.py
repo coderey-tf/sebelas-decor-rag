@@ -389,14 +389,17 @@ def query_rag(user_message, history=None):
         from db_client import extract_lead_from_conversation
         lead_info = extract_lead_from_conversation(user_message, history=history)
         if not lead_info.get("is_complete"):
+            import time
+            time.sleep(1.2)  # Jeda alami 1.2 detik agar indikator mengetik terasa manusiawi
             return (
                 "Halo kak! 👋 Selamat datang di Sebelas Decor. ✨\n\n"
-                "Senang sekali bisa membantu mewujudkan dekorasi impian Kakak!\n"
-                "Untuk memberikan rincian katalog & pricelist yang paling sesuai, boleh dibantu infokan 3 detail berikut Kak?\n\n"
-                "1) 📅 **Tanggal berapa** rencana acaranya?\n"
-                "2) 💒 Acaranya untuk **Pernikahan (Wedding)** atau **Lamaran (Engagement)**?\n"
-                "3) 🏛️ Lokasinya di **Gedung/Hotel** atau di **Rumah**?\n\n"
-                "Setelah 3 detail ini lengkap, kami akan langsung kirimkan pricelist spesifiknya ya! 😊"
+                "Senang sekali bisa membantu mewujudkan acara impian Kakak!\n\n"
+                "Sebelum saya kirimkan pricelist yang sesuai, saya perlu tanyakan beberapa detail dulu ya:\n\n"
+                "1. Rencana acaranya tanggal berapa, Kak?\n"
+                "2. 💒 Acaranya untuk **Pernikahan (Wedding)** atau **Lamaran (Engagement)**?\n"
+                "3. 🏛️ Lokasi acaranya di **Gedung/Hotel** atau di **Rumah**?\n\n"
+                "Setelah 3 info itu terkumpul, nanti saya langsung kirimkan pricelist yang paling pas beserta promo menariknya. Semakin detail, semakin bisa kami bantu rekomendasikan tema yang cocok juga. 😊\n\n"
+                "Ditunggu ya, Kak!"
             )
 
     # --- Semantic Search ---
