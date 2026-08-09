@@ -174,7 +174,13 @@ def extract_lead_from_text(user_message: str) -> dict:
         extracted['event_type'] = 'Engagement'
     elif 'ulang tahun' in msg_lower or 'ultah' in msg_lower or 'birthday' in msg_lower or 'sweet 17' in msg_lower:
         extracted['event_type'] = 'Birthday'
-        
+
+    # Deteksi Tipe Lokasi (Gedung vs Rumah)
+    if any(k in msg_lower for k in ['gedung', 'hotel', 'hall', 'ballroom', 'masjid', 'resto', 'restaurant', 'convention', 'aula']):
+        extracted['venue_type'] = 'Gedung'
+    elif any(k in msg_lower for k in ['rumah', 'halaman', 'garasi', 'home', 'kediaman']):
+        extracted['venue_type'] = 'Rumah'
+
     return extracted
 
 
