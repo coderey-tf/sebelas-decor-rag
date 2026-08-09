@@ -372,6 +372,7 @@ def query_rag(user_message, history=None):
         return "Halo! Ada yang bisa Sebelas Decor bantu? 😊"
 
     # --- Fast-Path: Respon Instan untuk Sapaan Sederhana ---
+    import re
     msg_clean = re.sub(r'[^\w\s]', '', user_message.lower()).strip()
     greetings = {
         "halo", "halo kak", "hi", "hi kak", "hello", "p", "ping", "spill",
