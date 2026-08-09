@@ -166,13 +166,21 @@ def extract_lead_from_text(user_message: str) -> dict:
     if phone_match:
         extracted['phone'] = phone_match.group(0)
 
-    # Deteksi Nama ("nama saya Anisa", "dengan Maya", "nama: Maya", "perkenalkan Budi")
-    name_match = re.search(r'(?:nama\s*(?:saya|aku)?\s*:?|dengan|perkenalkan)\s+([A-Za-z][A-Za-z\s]{1,30})', user_message, re.IGNORECASE)
-    if name_match:
-        # Filter out common false positives like "nama saya mau"
-        raw_name = name_match.group(1).strip()
-        if not any(stop_w in raw_name.lower() for stop_w in ['mau', 'tanya', 'bisa', 'inisiatif', 'booking', 'gedung', 'rumah', 'wedding', 'lamaran']):
+    # Deteksi Nama ("1. Reynaldi", "nama: Reynaldi", "nama saya Anisa", "dengan Maya", "perkenalkan Budi")
+    num_name_match = re.search(r'(?:^|\n)(?:1[\.\)]\s*|nama\s*[:=-]\s*)([A-Za-z][A-Za-z\s]{1,30})', user_message, re.IGNORECASE)
+    if num_name_match:
+        raw_name = num_name_match.group(1).strip()
+        stop_words = ['mau', 'tanya', 'bisa', 'inisiatif', 'booking', 'gedung', 'rumah', 'wedding', 'lamaran', 'oktober', 'september', 'agustus', 'juli', 'juni', 'mei', 'april', 'maret', 'februari', 'januari']
+        if not any(sw in raw_name.lower() for sw in stop_words):
             extracted['customer_name'] = raw_name.title()
+
+    if not extracted.get('customer_name'):
+        name_match = re.search(r'(?:nama\s*(?:saya|aku)?\s*:?|dengan|perkenalkan)\s+([A-Za-z][A-Za-z\s]{1,30})', user_message, re.IGNORECASE)
+        if name_match:
+            raw_name = name_match.group(1).strip()
+            stop_words = ['mau', 'tanya', 'bisa', 'inisiatif', 'booking', 'gedung', 'rumah', 'wedding', 'lamaran']
+            if not any(sw in raw_name.lower() for sw in stop_words):
+                extracted['customer_name'] = raw_name.title()
 
     # Deteksi Jenis Acara
     if any(k in msg_lower for k in ['nikah', 'wedding', 'resepsi', 'akad', 'menikah', 'pernikahan']):

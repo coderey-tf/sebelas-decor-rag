@@ -36,7 +36,7 @@ load_dotenv()
 MIMO_API_KEY = os.getenv("MIMO_API_KEY", "")
 MIMO_BASE_URL = os.getenv("MIMO_BASE_URL", "http://154.26.131.186:20128/v1").rstrip("/")
 MIMO_API_URL = f"{MIMO_BASE_URL}/chat/completions"
-MIMO_MODEL = os.getenv("MIMO_MODEL", "FREE")
+MIMO_MODEL = os.getenv("MIMO_MODEL", "MIMO")
 
 # ──────────────────────────────────────────────
 # 2. Konfigurasi
@@ -403,6 +403,23 @@ def query_rag(user_message, history=None):
                 "Ditunggu ya, Kak!"
             )
 
+    # ── Fast-Path Tahap 2: Jika 4 Filter Data Sudah Lengkap ──
+    from db_client import extract_lead_from_conversation
+    lead_info = extract_lead_from_conversation(user_message, history=history)
+
+    if lead_info.get("is_complete"):
+        name = lead_info.get("customer_name", "Kak")
+        pkg = lead_info.get("package", "Pilihan")
+        import time
+        time.sleep(1.0)  # Jeda alami 1.0 detik
+        return (
+            f"Terima kasih banyak, Kak {name}! ✨\n\n"
+            f"Berikut link Pricelist **{pkg}** resmi Sebelas Decor yang sesuai dengan kebutuhan Kakak:\n\n"
+            f"📄 **Pricelist {pkg} Sebelas Decor**:\n"
+            f"https://drive.google.com/file/d/1TKXd4R10wQFI_BL9_Z4nD8iXiXsD9k7X/view?usp=drive_link\n\n"
+            f"Silakan dipelajari rincian paketnya ya Kak. Jika ada penyesuaian tema atau pertanyaan lebih lanjut, kami siap membantu! 😊"
+        )
+
     # --- Semantic Search ---
     results = semantic_search(user_message)
 
@@ -435,40 +452,6 @@ def query_rag(user_message, history=None):
 
     context = "\n\n---\n\n".join(context_parts) if context_parts else "Data pricelist, katalog tema, dan FAQ Sebelas Decor."
 
-    # --- Cek Ketersediaan Tanggal di Database Supabase ---
-    availability_context = ""
-    # Cek dari pesan user atau history percakapan
-    search_text = user_message
-    if history and isinstance(history, list):
-        for msg in reversed(history[-4:]):
-            if isinstance(msg, dict) and msg.get("content"):
-                search_text += " " + msg["content"]
-
-    from db_client import check_date_availability, parse_indonesian_date
-    parsed_date = parse_indonesian_date(search_text)
-    
-    if parsed_date:
-        avail_res = check_date_availability(parsed_date)
-        if avail_res.get("available") is False:
-            bookings_info = avail_res.get("existing_bookings", [])
-            booking_details = ", ".join([f"{b.get('event_type')} ({b.get('package', 'Pilihan')})" for b in bookings_info])
-            availability_context = f"""
-⚠️ STATUS KETERSEDIAAN TANGGAL DI DATABASE SUPABASE:
-- Tanggal {avail_res.get('date_formatted')} SUDAH TERISI / PENUH (Status: Booked/DP Paid di Database).
-- Detail Booking Eksisting: {booking_details}
-
-INSTRUKSI KHUSUS KETERSEDIAAN:
-Kamu HARUS memberi tahu pelanggan dengan sangat sopan bahwa tanggal {avail_res.get('date_formatted')} SUDAH PENUH/TERISI (sudah ada booking masuk). Mohon minta maaf dan tawarkan pelanggan opsi tanggal alternatif lain atau jadwal terdekat! DILARANG KERAS mengatakan tanggal ini masih tersedia.
-"""
-        elif avail_res.get("available") is True and avail_res.get("date_formatted"):
-            availability_context = f"""
-✅ STATUS KETERSEDIAAN TANGGAL DI DATABASE SUPABASE:
-- Tanggal {avail_res.get('date_formatted')} MASIH TERSEDIA (Kosong di Database).
-
-INSTRUKSI KHUSUS KETERSEDIAAN:
-Konfirmasikan dengan gembira bahwa tanggal {avail_res.get('date_formatted')} masih tersedia untuk dipesan!
-"""
-
     # --- System Prompt dengan Alur 4-Filter Sales Funnel ---
     system_prompt = f"""Kamu adalah asisten virtual resmi & admin sales utama dari "Sebelas Decor" (jasa dekorasi event: pernikahan/wedding & lamaran/engagement).
 
@@ -485,7 +468,7 @@ TAHAP 1 — PENGUMPULAN 4 DATA UTAMA (JANGAN KIRIM PRICELIST DULU!):
    Jika klien baru menyapa, bertanya tentang dekorasi, atau meminta pricelist:
    - Sambut dengan hangat dan ramah.
    - Sampaikan bahwa kamu perlu mengetahui beberapa detail dulu agar bisa memberikan pricelist yang paling sesuai.
-   - JANGAN berikan link pricelist sebelum 4 detail berikut terkumpul dari pesan percakapan:
+   - JANGAN berikan link pricelist sebelum 4 detail berikut terkumpul:
      1) 👤 **Nama Kakak/Klien** siapa?
      2) 📅 **Tanggal berapa** rencana acaranya?
      3) 💒 Acaranya untuk **Pernikahan (Wedding)** atau **Lamaran (Engagement)**?
@@ -493,20 +476,12 @@ TAHAP 1 — PENGUMPULAN 4 DATA UTAMA (JANGAN KIRIM PRICELIST DULU!):
    - Jika klien hanya menjawab sebagian, tanyakan detail yang belum dijawab dengan sopan.
 
 TAHAP 2 — KIRIM PRICELIST SPESIFIK (SETELAH 4 DATA LENGKAP):
-   Setelah 4 detail di atas (Nama, Tanggal, Jenis Acara, Tipe Venue) terkumpul dari percakapan:
-   - Perhatikan info ketersediaan tanggal dari database di bawah. Jika tanggal SUDAH PENUH, sampaikan maaf dan tawarkan opsi tanggal lain. Jika MASIH TERSEDIA, konfirmasikan dengan gembira.
+   Setelah 4 detail di atas terkumpul dari percakapan:
    - Kirim link Google Drive PDF Pricelist yang SESUAI KATEGORI klien:
      📄 **Pricelist [KATEGORI] Sebelas Decor**:
      https://drive.google.com/file/d/1TKXd4R10wQFI_BL9_Z4nD8iXiXsD9k7X/view?usp=drive_link
      (Ganti [KATEGORI] dengan: Wedding Gedung / Wedding Rumah / Engagement Gedung / Engagement Rumah sesuai jawaban klien.)
-   - WAJIB TAMPILKAN BROSUR PROMO SESUAI ACARA KLIEN:
-     • Untuk WEDDING / PERNIKAHAN:
-       ![Promo Wedding](/static/images/promo_wedding.png)
-     • Untuk ENGAGEMENT / LAMARAN:
-       ![Promo Engagement](/static/images/promo_engagement.png)
    - Tawarkan konsultasi desain & penyesuaian tema gratis.
-
-{availability_context}
 
 ATURAN PENTING:
 - DILARANG memberikan link pricelist sebelum 4 detail (Nama, Tanggal, Jenis Acara, Tipe Venue) terkumpul!
