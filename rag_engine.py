@@ -149,9 +149,9 @@ def rebuild_vectorstore():
 
 
 # ──────────────────────────────────────────────
-# 4. Inisialisasi Vector Store saat module di-import
+# 4. Inisialisasi Vector Store (load dari disk jika ada)
 # ──────────────────────────────────────────────
-vectorstore = rebuild_vectorstore()
+vectorstore = get_vectorstore()
 
 
 
@@ -198,8 +198,8 @@ def call_mimo_api(system_prompt, user_prompt, history=None):
         "model": MIMO_MODEL,
         "messages": messages,
         "temperature": 0.7,
-        "max_tokens": 1024,
-        "stream": False,
+        "max_tokens": 450,
+        "stream": True,
     }
 
 
