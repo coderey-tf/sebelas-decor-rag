@@ -19,7 +19,19 @@ import threading
 # Inisialisasi Flask App
 # ──────────────────────────────────────────────
 app = Flask(__name__, static_folder="static", static_url_path="/static")
+app.config["JSON_AS_ASCII"] = False
+if hasattr(app, "json"):
+    app.json.ensure_ascii = False
+
 CORS(app)  # Izinkan CORS dari frontend
+
+
+@app.after_request
+def add_charset_header(response):
+    """Pastikan respon JSON selalu menggunakan UTF-8 agar emoji tampil sempurna"""
+    if response.mimetype == "application/json":
+        response.headers["Content-Type"] = "application/json; charset=utf-8"
+    return response
 
 
 # ──────────────────────────────────────────────

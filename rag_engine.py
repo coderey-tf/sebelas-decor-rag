@@ -378,10 +378,14 @@ def query_rag(user_message, history=None):
         "halo", "halo kak", "hi", "hi kak", "hello", "p", "ping", "spill",
         "selamat siang", "selamat pagi", "selamat sore", "selamat malam",
         "pagi", "siang", "sore", "malam", "siang kak", "pagi kak", "sore kak", "malam kak",
-        "permisi", "assalamualaikum", "assalamu alaikum", "min", "halo min"
+        "permisi", "assalamualaikum", "assalamu alaikum", "min", "halo min",
+        "selamat siang kak", "selamat pagi kak", "selamat sore kak", "selamat malam kak"
     }
 
-    if msg_clean in greetings or (len(msg_clean) <= 12 and any(g in msg_clean for g in ["halo", "hi", "pagi", "siang", "sore", "malam", "permisi", "assalam"])):
+    greeting_pattern = r'^(halo|hi|hello|p|ping|spill|selamat\s+(pagi|siang|sore|malam)|pagi|siang|sore|malam|permisi|assalamualaikum|assalamu\s+alaikum)(\s+(kak|min|gan|sis|admin|sebelas\s+decor))?$'
+    is_greeting_msg = bool(re.match(greeting_pattern, msg_clean))
+
+    if is_greeting_msg or msg_clean in greetings or (len(msg_clean) <= 20 and any(g in msg_clean for g in ["halo", "hi", "pagi", "siang", "sore", "malam", "permisi", "assalam"])):
         from db_client import extract_lead_from_conversation
         lead_info = extract_lead_from_conversation(user_message, history=history)
         if not lead_info.get("is_complete"):
