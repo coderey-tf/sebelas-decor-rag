@@ -87,14 +87,14 @@ sebelasdecor-rag-antigravity/
 
 ## 🔧 Tech Stack
 
-| Komponen | Teknologi | Keterangan |
-|----------|-----------|------------|
-| **Embedding Model** | `sentence-transformers/all-MiniLM-L6-v2` | Berjalan lokal di CPU, gratis |
-| **Vector Database** | ChromaDB | Lokal, persistent di `chroma_db/` |
-| **LLM (Generasi)** | 9router API (OpenAI-compatible) | Model: `FREE` (gemini-2.5-flash) |
-| **Backend** | Python Flask + Flask-CORS | REST API `POST /api/chat` |
-| **Frontend** | HTML + CSS + Vanilla JS | Dark theme WhatsApp-style |
-| **Text Splitter** | LangChain `RecursiveCharacterTextSplitter` | Chunk: 500 chars, overlap: 80 |
+| Komponen            | Teknologi                                  | Keterangan                        |
+| ------------------- | ------------------------------------------ | --------------------------------- |
+| **Embedding Model** | `sentence-transformers/all-MiniLM-L6-v2`   | Berjalan lokal di CPU, gratis     |
+| **Vector Database** | ChromaDB                                   | Lokal, persistent di `chroma_db/` |
+| **LLM (Generasi)**  | 9router API (OpenAI-compatible)            | Model: `MIMO` (gemini-2.5-flash)  |
+| **Backend**         | Python Flask + Flask-CORS                  | REST API `POST /api/chat`         |
+| **Frontend**        | HTML + CSS + Vanilla JS                    | Dark theme WhatsApp-style         |
+| **Text Splitter**   | LangChain `RecursiveCharacterTextSplitter` | Chunk: 500 chars, overlap: 80     |
 
 ---
 
@@ -125,10 +125,11 @@ pip install -r requirements.txt
 ### 3. Konfigurasi API Key
 
 Edit file `.env`:
+
 ```env
 MIMO_API_KEY=sk-your-api-key-here
 MIMO_BASE_URL=http://154.26.131.186:20128/v1
-MIMO_MODEL=FREE
+MIMO_MODEL=MIMO
 ```
 
 ### 4. Jalankan Server
@@ -138,6 +139,7 @@ python app.py
 ```
 
 Output:
+
 ```
 🌸 Sebelas Decor — RAG Chatbot API Server
 📡 Server berjalan di: http://127.0.0.1:5000
@@ -155,6 +157,7 @@ Buka file `index.html` di browser.
 ### `POST /api/chat`
 
 **Request:**
+
 ```json
 {
   "message": "Berapa harga paket Indoor VIP?"
@@ -162,6 +165,7 @@ Buka file `index.html` di browser.
 ```
 
 **Response:**
+
 ```json
 {
   "reply": "Halo Kak! 😊 Paket Indoor VIP kami dihargai Rp 7.500.000..."
@@ -177,15 +181,17 @@ Health check — menampilkan status server.
 ## 📚 Knowledge Base
 
 ### 1. Pricelist (`pricelist.txt`)
-| Paket | Harga | Kapasitas |
-|-------|-------|-----------|
-| Indoor Basic | Rp 3.500.000 | 100 tamu |
-| Indoor VIP | Rp 7.500.000 | 300 tamu |
-| Outdoor Garden | Rp 6.000.000 | 150 tamu |
-| Outdoor Beach | Rp 8.000.000 | 100 tamu |
-| Akad Nikah | Rp 4.500.000 | 80 tamu |
+
+| Paket          | Harga        | Kapasitas |
+| -------------- | ------------ | --------- |
+| Indoor Basic   | Rp 3.500.000 | 100 tamu  |
+| Indoor VIP     | Rp 7.500.000 | 300 tamu  |
+| Outdoor Garden | Rp 6.000.000 | 150 tamu  |
+| Outdoor Beach  | Rp 8.000.000 | 100 tamu  |
+| Akad Nikah     | Rp 4.500.000 | 80 tamu   |
 
 ### 2. Katalog Tema (`katalog_tema.txt`)
+
 - 🪵 **Rustic Minimalist** — Natural, earth tone, kayu & burlap
 - ✨ **Modern Elegant** — Kontemporer, akrilik, geometris
 - 🏛️ **Traditional Jawa** — Gebyok, janur, batik
@@ -193,6 +199,7 @@ Health check — menampilkan status server.
 - 🌿 **Boho Chic** — Macrame, pampas grass, dream catcher
 
 ### 3. FAQ (`faq.txt`)
+
 - DP minimal 50% untuk booking tanggal
 - 2x revisi gratis (revisi ke-3+ dikenakan Rp 200.000)
 - Durasi pengerjaan 2-5 hari kerja
@@ -228,12 +235,15 @@ Health check — menampilkan status server.
 ## 🔮 Roadmap & Integrasi Lanjutan
 
 ### WhatsApp Business (Meta Cloud API)
+
 Arsitektur backend sudah siap diintegrasikan ke WhatsApp Business Cloud API:
+
 - Tambahkan endpoint `/webhook` untuk menerima pesan WA dari Meta
 - Fungsi `query_rag()` tetap sama — hanya perlu menambahkan handler webhook
 - Gratis untuk pesan layanan pelanggan (customer-initiated, service messages)
 
 ### Potensi Pengembangan
+
 - [ ] Integrasi WhatsApp Business API (Meta)
 - [ ] Integrasi Telegram Bot
 - [ ] Dashboard admin untuk update knowledge base

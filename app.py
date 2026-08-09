@@ -126,19 +126,18 @@ def chat():
         # Cek apakah lead dengan nomor HP ini sudah ada di DB
         existing_lead = get_lead_by_phone(phone) if phone else None
 
-        # Jika lead SUDAH DILANJUTKAN KE ADMIN (Status: FollowUp, Booked, DpPaid, Completed)
-        # -> NONAKTIFKAN AUTO-REPLY BOT agar Admin yang meneruskan percakapan!
-        if existing_lead and existing_lead.get("status") in ["FollowUp", "Follow-up", "Booked", "DpPaid", "DP Paid", "Completed"]:
+        # Jika lead SUDAH ADA di database (data sudah di-capture) -> Chatbot TIDAK REPLY (Admin yang meneruskan)
+        if existing_lead:
             return jsonify({
-                "reply": "Terima kasih! Pesan Kakak sudah kami teruskan ke Admin Sebelas Decor. Admin kami akan segera membalas percakapan ini secara langsung ya Kak. 😊",
+                "reply": "",
                 "autoReply": False,
                 "handoverToAdmin": True,
                 "leadSaved": False,
                 "leadData": existing_lead
             })
 
-        # Panggil RAG engine dengan history
-        reply = query_rag(user_message, history=history)
+        # Panggil RAG engine dengan history & phone
+        reply = query_rag(user_message, history=history, phone=phone)
 
         # ── 2. Akumulasi data lead dari seluruh percakapan ──
         lead_info = lead_info_pre

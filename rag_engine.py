@@ -365,7 +365,7 @@ def _parse_json_response(raw_text):
 # ──────────────────────────────────────────────
 # 7. Fungsi Utama: query_rag
 # ──────────────────────────────────────────────
-def query_rag(user_message, history=None):
+def query_rag(user_message, history=None, phone=None):
     """
     Pipeline utama RAG dengan alur sales percakapan & multi-turn memory:
     """
@@ -389,25 +389,24 @@ def query_rag(user_message, history=None):
 
     if is_pure_greeting:
         from db_client import extract_lead_from_conversation
-        lead_info = extract_lead_from_conversation(user_message, history=history)
+        lead_info = extract_lead_from_conversation(user_message, history=history, wa_phone=phone)
         if not lead_info.get("is_complete"):
             import time
             time.sleep(1.2)  # Jeda alami 1.2 detik agar indikator mengetik terasa manusiawi
             return (
-                "Halo kak! 👋 Selamat datang di Sebelas Decor. ✨\n\n"
-                "Senang sekali bisa membantu mewujudkan acara impian Kakak!\n\n"
-                "Sebelum saya kirimkan pricelist yang paling sesuai, boleh dibantu infokan 4 detail berikut ya Kak:\n\n"
-                "1. 👤 **Nama Kakak** siapa?\n"
-                "2. 📅 **Rencana acaranya tanggal berapa**, Kak?\n"
-                "3. 💒 Acaranya untuk **Pernikahan (Wedding)** atau **Lamaran (Engagement)**?\n"
-                "4. 🏛️ Lokasi acaranya di **Gedung/Hotel** atau di **Rumah**?\n\n"
-                "Setelah 4 info itu terkumpul, nanti saya langsung kirimkan pricelist yang paling pas beserta promo menariknya. 😊\n\n"
-                "Ditunggu ya, Kak!"
+                "Halo Kak! 👋 Selamat datang di Sebelas Decor. ✨\n\n"
+                "Senang sekali bisa menyambut Kakak! Biar kami bisa memberikan rekomendasi katalog & pricelist yang paling pas untuk acara impian Kakak, boleh dibantu infokan detail rencananya:\n\n"
+                "1. 👤 **Nama** : \n"
+                "2. 📅 **Rencana tanggal acara** : (contoh: 20 Oktober 2026)\n"
+                "3. 💒 **Jenis acara (Pernikahan / Lamaran)** : \n"
+                "4. 🏛️ **Rencana tempat (Gedung / Rumah)** : \n\n"
+                "💡 *Catatan: Jika tanggal acaranya belum ada, tidak apa-apa dikosongi atau dilewati dulu ya Kak!*\n\n"
+                "Ditunggu informasinya ya Kak! 😊"
             )
 
     # ── Fast-Path Tahap 2: Jika 4 Filter Data Sudah Lengkap ──
     from db_client import extract_lead_from_conversation
-    lead_info = extract_lead_from_conversation(user_message, history=history)
+    lead_info = extract_lead_from_conversation(user_message, history=history, wa_phone=phone)
 
     if lead_info.get("is_complete"):
         name = lead_info.get("customer_name", "Kak")
@@ -419,7 +418,7 @@ def query_rag(user_message, history=None):
             f"Berikut link Pricelist **{pkg}** resmi Sebelas Decor yang sesuai dengan kebutuhan Kakak:\n\n"
             f"📄 **Pricelist {pkg} Sebelas Decor**:\n"
             f"https://drive.google.com/file/d/1TKXd4R10wQFI_BL9_Z4nD8iXiXsD9k7X/view?usp=drive_link\n\n"
-            f"Silakan dipelajari rincian paketnya ya Kak. Jika ada penyesuaian tema atau pertanyaan lebih lanjut, kami siap membantu! 😊"
+            f"Silakan dipelajari rincian paketnya ya Kak. Data Kakak sudah kami catat, dan percakapan ini akan segera dilanjutkan langsung oleh Admin kami untuk konsultasi & penyesuaian lebih lanjut! 😊"
         )
 
     # --- Semantic Search ---
@@ -483,7 +482,7 @@ TAHAP 2 — KIRIM PRICELIST SPESIFIK (SETELAH 4 DATA LENGKAP):
      📄 **Pricelist [KATEGORI] Sebelas Decor**:
      https://drive.google.com/file/d/1TKXd4R10wQFI_BL9_Z4nD8iXiXsD9k7X/view?usp=drive_link
      (Ganti [KATEGORI] dengan: Wedding Gedung / Wedding Rumah / Engagement Gedung / Engagement Rumah sesuai jawaban klien.)
-   - Tawarkan konsultasi desain & penyesuaian tema gratis.
+   - Tawarkan konsultasi desain & penyesuaian tema gratis, dan sampaikan bahwa data sudah dicatat serta percakapan akan segera dilanjutkan oleh Admin.
 
 ATURAN PENTING:
 - DILARANG memberikan link pricelist sebelum 4 detail (Nama, Tanggal, Jenis Acara, Tipe Venue) terkumpul!

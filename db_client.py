@@ -48,7 +48,14 @@ def get_lead_by_phone(phone: str) -> dict:
             WHERE phone = %s;
         """, (phone,))
         lead = cursor.fetchone()
-        return dict(lead) if lead else None
+        if not lead:
+            return None
+        res = dict(lead)
+        if res.get("event_date"):
+            res["event_date"] = str(res["event_date"])
+        if res.get("created_at"):
+            res["created_at"] = str(res["created_at"])
+        return res
     except Exception as e:
         print(f"❌ [DB Error get_lead_by_phone]: {e}")
         return None
@@ -336,18 +343,41 @@ def extract_lead_from_conversation(current_message: str, history: list = None, w
     if wa_phone and not accumulated.get('phone'):
         accumulated['phone'] = wa_phone
 
-    # CATATAN: wa_name DIBUANG / TIDAK DIPAKAI agar nama klien murni dari teks chat!
+    # 3.5 Cek database: jika lead dengan nomor HP ini sudah tersimpan, ambil datanya dari DB
+    target_phone = accumulated.get('phone')
+    if target_phone:
+        existing = get_lead_by_phone(target_phone)
+        if existing:
+            if existing.get('customer_name') and not accumulated.get('customer_name'):
+                accumulated['customer_name'] = existing['customer_name']
+            if existing.get('event_date') and not accumulated.get('event_date'):
+                accumulated['event_date'] = str(existing['event_date'])
+            if existing.get('event_type') and not accumulated.get('event_type'):
+                accumulated['event_type'] = existing['event_type']
+            if existing.get('package') and not accumulated.get('package'):
+                accumulated['package'] = existing['package']
+                if 'Gedung' in existing['package']:
+                    accumulated['venue_type'] = 'Gedung'
+                elif 'Rumah' in existing['package']:
+                    accumulated['venue_type'] = 'Rumah'
+            if existing.get('location') and not accumulated.get('location'):
+                accumulated['location'] = existing['location']
 
-    # 4. Generate package name (gabungan event_type + venue_type)
+    # 4. Generate package & fallback jika tanggal / venue dikosongkan/belum tahu
     event_type = accumulated.get('event_type')
+    if accumulated.get('customer_name') and event_type:
+        if not accumulated.get('venue_type'):
+            accumulated['venue_type'] = 'Gedung'  # Default venue jika dikosongkan
+        if not accumulated.get('event_date'):
+            accumulated['event_date'] = 'Belum pasti'  # Default tanggal jika dikosongkan
+
     venue_type = accumulated.get('venue_type')
     if event_type and venue_type:
         accumulated['package'] = f"{event_type} {venue_type}"
 
-    # 5. Cek kelengkapan 4 filter wajib (Nama, Tanggal, EventType, VenueType)
+    # 5. Cek kelengkapan (Minimal Nama dan Jenis Acara sudah diisi)
     accumulated['is_complete'] = all([
         accumulated.get('customer_name'),
-        accumulated.get('event_date'),
         accumulated.get('event_type'),
         accumulated.get('venue_type'),
     ])

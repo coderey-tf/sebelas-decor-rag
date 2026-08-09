@@ -649,6 +649,12 @@
           }
 
           const data = await response.json();
+
+          if (data.autoReply === false && !data.reply) {
+            setLoading(false);
+            return;
+          }
+
           const reply =
             data.reply || "Maaf, saya tidak mendapatkan jawaban saat ini. 🙏";
 
