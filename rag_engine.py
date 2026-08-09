@@ -11,6 +11,7 @@ import os
 import sys
 import glob
 import json
+import re
 import requests
 import warnings
 from dotenv import load_dotenv
@@ -369,6 +370,29 @@ def query_rag(user_message, history=None):
     """
     if not user_message or not user_message.strip():
         return "Halo! Ada yang bisa Sebelas Decor bantu? 😊"
+
+    # --- Fast-Path: Respon Instan untuk Sapaan Sederhana ---
+    msg_clean = re.sub(r'[^\w\s]', '', user_message.lower()).strip()
+    greetings = {
+        "halo", "halo kak", "hi", "hi kak", "hello", "p", "ping", "spill",
+        "selamat siang", "selamat pagi", "selamat sore", "selamat malam",
+        "pagi", "siang", "sore", "malam", "siang kak", "pagi kak", "sore kak", "malam kak",
+        "permisi", "assalamualaikum", "assalamu alaikum", "min", "halo min"
+    }
+
+    if msg_clean in greetings or (len(msg_clean) <= 12 and any(g in msg_clean for g in ["halo", "hi", "pagi", "siang", "sore", "malam", "permisi", "assalam"])):
+        from db_client import extract_lead_from_conversation
+        lead_info = extract_lead_from_conversation(user_message, history=history)
+        if not lead_info.get("is_complete"):
+            return (
+                "Halo kak! 👋 Selamat datang di Sebelas Decor. ✨\n\n"
+                "Senang sekali bisa membantu mewujudkan dekorasi impian Kakak!\n"
+                "Untuk memberikan rincian katalog & pricelist yang paling sesuai, boleh dibantu infokan 3 detail berikut Kak?\n\n"
+                "1) 📅 **Tanggal berapa** rencana acaranya?\n"
+                "2) 💒 Acaranya untuk **Pernikahan (Wedding)** atau **Lamaran (Engagement)**?\n"
+                "3) 🏛️ Lokasinya di **Gedung/Hotel** atau di **Rumah**?\n\n"
+                "Setelah 3 detail ini lengkap, kami akan langsung kirimkan pricelist spesifiknya ya! 😊"
+            )
 
     # --- Semantic Search ---
     results = semantic_search(user_message)
