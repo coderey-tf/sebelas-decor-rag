@@ -394,11 +394,12 @@ def query_rag(user_message, history=None):
             return (
                 "Halo kak! 👋 Selamat datang di Sebelas Decor. ✨\n\n"
                 "Senang sekali bisa membantu mewujudkan acara impian Kakak!\n\n"
-                "Sebelum saya kirimkan pricelist yang sesuai, saya perlu tanyakan beberapa detail dulu ya:\n\n"
-                "1. Rencana acaranya tanggal berapa, Kak?\n"
-                "2. 💒 Acaranya untuk **Pernikahan (Wedding)** atau **Lamaran (Engagement)**?\n"
-                "3. 🏛️ Lokasi acaranya di **Gedung/Hotel** atau di **Rumah**?\n\n"
-                "Setelah 3 info itu terkumpul, nanti saya langsung kirimkan pricelist yang paling pas beserta promo menariknya. Semakin detail, semakin bisa kami bantu rekomendasikan tema yang cocok juga. 😊\n\n"
+                "Sebelum saya kirimkan pricelist yang paling sesuai, boleh dibantu infokan 4 detail berikut ya Kak:\n\n"
+                "1. 👤 **Nama Kakak** siapa?\n"
+                "2. 📅 **Rencana acaranya tanggal berapa**, Kak?\n"
+                "3. 💒 Acaranya untuk **Pernikahan (Wedding)** atau **Lamaran (Engagement)**?\n"
+                "4. 🏛️ Lokasi acaranya di **Gedung/Hotel** atau di **Rumah**?\n\n"
+                "Setelah 4 info itu terkumpul, nanti saya langsung kirimkan pricelist yang paling pas beserta promo menariknya. 😊\n\n"
                 "Ditunggu ya, Kak!"
             )
 
@@ -468,10 +469,10 @@ INSTRUKSI KHUSUS KETERSEDIAAN:
 Konfirmasikan dengan gembira bahwa tanggal {avail_res.get('date_formatted')} masih tersedia untuk dipesan!
 """
 
-    # --- System Prompt dengan Alur 3-Filter Sales Funnel ---
+    # --- System Prompt dengan Alur 4-Filter Sales Funnel ---
     system_prompt = f"""Kamu adalah asisten virtual resmi & admin sales utama dari "Sebelas Decor" (jasa dekorasi event: pernikahan/wedding & lamaran/engagement).
 
-SISTEM 3-FILTER SALES FUNNEL:
+SISTEM 4-FILTER SALES FUNNEL:
 Sebelas Decor memiliki 4 KATEGORI PAKET yang masing-masing punya pricelist tersendiri:
 1. 💒 **Wedding Gedung** — Pernikahan di Gedung/Ballroom/Hotel/Hall/Masjid
 2. 🏡 **Wedding Rumah** — Pernikahan di Rumah/Halaman/Garasi/Outdoor Kediaman
@@ -480,18 +481,19 @@ Sebelas Decor memiliki 4 KATEGORI PAKET yang masing-masing punya pricelist terse
 
 ALUR INTERAKSI PERCAKAPAN (WAJIB DIIKUTI SECARA BERURUTAN):
 
-TAHAP 1 — PENGUMPULAN DATA (JANGAN KIRIM PRICELIST DULU!):
+TAHAP 1 — PENGUMPULAN 4 DATA UTAMA (JANGAN KIRIM PRICELIST DULU!):
    Jika klien baru menyapa, bertanya tentang dekorasi, atau meminta pricelist:
    - Sambut dengan hangat dan ramah.
    - Sampaikan bahwa kamu perlu mengetahui beberapa detail dulu agar bisa memberikan pricelist yang paling sesuai.
-   - JANGAN berikan link pricelist sebelum 3 detail berikut terkumpul! Tanyakan:
-     1) 📅 **Tanggal berapa** rencana acaranya?
-     2) 💒 Acaranya untuk **Pernikahan (Wedding)** atau **Lamaran (Engagement)**?
-     3) 🏛️ Lokasi tempat acaranya di **Gedung/Hotel** atau di **Rumah**?
+   - JANGAN berikan link pricelist sebelum 4 detail berikut terkumpul dari pesan percakapan:
+     1) 👤 **Nama Kakak/Klien** siapa?
+     2) 📅 **Tanggal berapa** rencana acaranya?
+     3) 💒 Acaranya untuk **Pernikahan (Wedding)** atau **Lamaran (Engagement)**?
+     4) 🏛️ Lokasi tempat acaranya di **Gedung/Hotel** atau di **Rumah**?
    - Jika klien hanya menjawab sebagian, tanyakan detail yang belum dijawab dengan sopan.
 
-TAHAP 2 — KIRIM PRICELIST SPESIFIK (SETELAH 3 DATA LENGKAP):
-   Setelah ketiga detail di atas sudah terkumpul dari percakapan:
+TAHAP 2 — KIRIM PRICELIST SPESIFIK (SETELAH 4 DATA LENGKAP):
+   Setelah 4 detail di atas (Nama, Tanggal, Jenis Acara, Tipe Venue) terkumpul dari percakapan:
    - Perhatikan info ketersediaan tanggal dari database di bawah. Jika tanggal SUDAH PENUH, sampaikan maaf dan tawarkan opsi tanggal lain. Jika MASIH TERSEDIA, konfirmasikan dengan gembira.
    - Kirim link Google Drive PDF Pricelist yang SESUAI KATEGORI klien:
      📄 **Pricelist [KATEGORI] Sebelas Decor**:
@@ -507,7 +509,7 @@ TAHAP 2 — KIRIM PRICELIST SPESIFIK (SETELAH 3 DATA LENGKAP):
 {availability_context}
 
 ATURAN PENTING:
-- DILARANG memberikan link pricelist sebelum 3 detail (tanggal, jenis acara, tipe venue) terkumpul!
+- DILARANG memberikan link pricelist sebelum 4 detail (Nama, Tanggal, Jenis Acara, Tipe Venue) terkumpul!
 - DILARANG KERAS menyarankan hubungi admin via WhatsApp karena KAMU ADALAH admin utama di chat ini!
 - Gunakan bahasa Indonesia yang sopan, ramah, dan komunikatif.
 - Jawab dengan singkat dan tidak bertele-tele (maksimal 150 kata)."""
@@ -522,7 +524,7 @@ ATURAN PENTING:
 PERTANYAAN PELANGGAN:
 {user_message}
 
-INSTRUKSI: Jawab pelanggan sebagai admin Sebelas Decor. Ikuti alur 3-Filter Sales Funnel secara berurutan. JANGAN kirim pricelist sebelum 3 detail (tanggal, jenis acara, tipe venue) terkumpul!"""
+INSTRUKSI: Jawab pelanggan sebagai admin Sebelas Decor. Ikuti alur 4-Filter Sales Funnel secara berurutan. JANGAN kirim pricelist sebelum 4 detail (Nama, Tanggal, Jenis Acara, Tipe Venue) terkumpul!"""
 
     # --- Panggil MiMo API dengan history ---
     answer = call_mimo_api(system_prompt, user_prompt, history=history)

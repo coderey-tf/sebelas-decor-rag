@@ -166,10 +166,13 @@ def extract_lead_from_text(user_message: str) -> dict:
     if phone_match:
         extracted['phone'] = phone_match.group(0)
 
-    # Deteksi Nama ("nama saya Anisa", "saya Budi", "nama aku Maya")
-    name_match = re.search(r'(?:nama\s+(?:saya|aku)|saya|aku|perkenalkan)\s+([A-Za-z][A-Za-z\s]{1,30})', user_message, re.IGNORECASE)
+    # Deteksi Nama ("nama saya Anisa", "dengan Maya", "nama: Maya", "perkenalkan Budi")
+    name_match = re.search(r'(?:nama\s*(?:saya|aku)?\s*:?|dengan|perkenalkan)\s+([A-Za-z][A-Za-z\s]{1,30})', user_message, re.IGNORECASE)
     if name_match:
-        extracted['customer_name'] = name_match.group(1).strip()
+        # Filter out common false positives like "nama saya mau"
+        raw_name = name_match.group(1).strip()
+        if not any(stop_w in raw_name.lower() for stop_w in ['mau', 'tanya', 'bisa', 'inisiatif', 'booking', 'gedung', 'rumah', 'wedding', 'lamaran']):
+            extracted['customer_name'] = raw_name.title()
 
     # Deteksi Jenis Acara
     if any(k in msg_lower for k in ['nikah', 'wedding', 'resepsi', 'akad', 'menikah', 'pernikahan']):
@@ -209,7 +212,8 @@ def extract_lead_from_text(user_message: str) -> dict:
 def extract_lead_from_conversation(current_message: str, history: list = None, wa_name: str = None, wa_phone: str = None) -> dict:
     """
     Mengakumulasi data lead dari SELURUH percakapan (current message + history).
-    Mendukung Meta Cloud API fields (wa_name, wa_phone dari WhatsApp webhook).
+    HANYA nomor HP (wa_phone) yang diambil dari Meta Cloud API.
+    Nama klien (customer_name) WAJIB diekstrak langsung dari isi pesan percakapan user!
     
     Returns dict dengan keys:
         customer_name, phone, event_date, event_type, venue_type, location,
@@ -233,11 +237,11 @@ def extract_lead_from_conversation(current_message: str, history: list = None, w
         if val:
             accumulated[key] = val
 
-    # 3. Override dari Meta Cloud API (WhatsApp) jika ada
-    if wa_name and not accumulated.get('customer_name'):
-        accumulated['customer_name'] = wa_name
+    # 3. HANYA No HP (wa_phone) yang di-override dari Meta Cloud API / WhatsApp webhook
     if wa_phone and not accumulated.get('phone'):
         accumulated['phone'] = wa_phone
+
+    # CATATAN: wa_name DIBUANG / TIDAK DIPAKAI agar nama klien murni dari teks chat!
 
     # 4. Generate package name (gabungan event_type + venue_type)
     event_type = accumulated.get('event_type')
@@ -245,8 +249,9 @@ def extract_lead_from_conversation(current_message: str, history: list = None, w
     if event_type and venue_type:
         accumulated['package'] = f"{event_type} {venue_type}"
 
-    # 5. Cek kelengkapan 3 filter wajib
+    # 5. Cek kelengkapan 4 filter wajib (Nama, Tanggal, EventType, VenueType)
     accumulated['is_complete'] = all([
+        accumulated.get('customer_name'),
         accumulated.get('event_date'),
         accumulated.get('event_type'),
         accumulated.get('venue_type'),
