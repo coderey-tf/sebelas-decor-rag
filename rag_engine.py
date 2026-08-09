@@ -212,6 +212,7 @@ def call_mimo_api(system_prompt, user_prompt, history=None):
             MIMO_API_URL, json=payload, headers=headers,
             timeout=60, stream=True
         )
+        response.encoding = "utf-8"
         response.raise_for_status()
 
         content_type = response.headers.get("Content-Type", "")
@@ -373,19 +374,20 @@ def query_rag(user_message, history=None):
 
     # --- Fast-Path: Respon Instan untuk Sapaan Sederhana ---
     import re
-    msg_clean = re.sub(r'[^\w\s]', '', user_message.lower()).strip()
-    greetings = {
-        "halo", "halo kak", "hi", "hi kak", "hello", "p", "ping", "spill",
-        "selamat siang", "selamat pagi", "selamat sore", "selamat malam",
-        "pagi", "siang", "sore", "malam", "siang kak", "pagi kak", "sore kak", "malam kak",
-        "permisi", "assalamualaikum", "assalamu alaikum", "min", "halo min",
-        "selamat siang kak", "selamat pagi kak", "selamat sore kak", "selamat malam kak"
-    }
+    msg_lower = user_message.lower().strip()
+    has_event_keywords = any(kw in msg_lower for kw in [
+        'wedding', 'nikah', 'lamaran', 'engagement', 'tunangan', 'ultah', 'birthday',
+        'gedung', 'rumah', 'hotel', 'hall', 'ballroom', 'masjid', 'resto', 'aula',
+        'januari', 'februari', 'maret', 'april', 'mei', 'juni', 'juli', 'agustus', 'september', 'oktober', 'november', 'desember',
+    ])
+    has_digits = bool(re.search(r'\d', user_message))
+    has_greeting_word = any(gw in msg_lower for gw in [
+        'halo', 'hi', 'hello', 'pagi', 'siang', 'sore', 'malam', 'selamat', 'permisi', 'assalam', 'spill', 'min', 'kak'
+    ])
 
-    greeting_pattern = r'^(halo|hi|hello|p|ping|spill|selamat\s+(pagi|siang|sore|malam)|pagi|siang|sore|malam|permisi|assalamualaikum|assalamu\s+alaikum)(\s+(kak|min|gan|sis|admin|sebelas\s+decor))?$'
-    is_greeting_msg = bool(re.match(greeting_pattern, msg_clean))
+    is_pure_greeting = (has_greeting_word and not has_event_keywords and not has_digits and len(msg_lower) <= 60)
 
-    if is_greeting_msg or msg_clean in greetings or (len(msg_clean) <= 20 and any(g in msg_clean for g in ["halo", "hi", "pagi", "siang", "sore", "malam", "permisi", "assalam"])):
+    if is_pure_greeting:
         from db_client import extract_lead_from_conversation
         lead_info = extract_lead_from_conversation(user_message, history=history)
         if not lead_info.get("is_complete"):
