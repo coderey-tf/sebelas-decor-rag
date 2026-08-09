@@ -16,8 +16,11 @@ if hasattr(sys.stdout, "reconfigure"):
 
 import psycopg2
 from psycopg2.extras import RealDictCursor
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from dotenv import load_dotenv
+
+# Timezone Waktu Indonesia Barat (WIB / UTC+7)
+WIB = timezone(timedelta(hours=7))
 
 load_dotenv()
 
@@ -85,7 +88,7 @@ def save_lead(
         conn = get_db_connection()
         cursor = conn.cursor(cursor_factory=RealDictCursor)
         
-        now = datetime.utcnow()
+        now = datetime.now(WIB)
         
         # Validasi & Mapping Enum LeadStatus untuk PostgreSQL
         STATUS_MAP = {
@@ -432,7 +435,7 @@ def parse_indonesian_date(text: str):
         match = re.search(pattern, text_lower)
         if match:
             day = int(match.group(1))
-            year = int(match.group(3)) if match.group(3) else datetime.now().year
+            year = int(match.group(3)) if match.group(3) else datetime.now(WIB).year
             try:
                 return datetime(year, month_num, day).date()
             except ValueError:
