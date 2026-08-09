@@ -50,15 +50,51 @@ RELEVANCE_THRESHOLD = 0.15  # skor jarak / similarity threshold
 
 
 # ──────────────────────────────────────────────
-# 3. Inisialisasi Embedding Model (lokal)
+# 3. Lazy-loaded Embedding Model & Vector Store
+#    (hanya di-init sekali saat pertama dipakai)
 # ──────────────────────────────────────────────
-print("⏳ Memuat embedding model (pertama kali mungkin butuh download)...")
-embeddings = HuggingFaceEmbeddings(
-    model_name=EMBEDDING_MODEL,
-    model_kwargs={"device": "cpu"},
-    encode_kwargs={"normalize_embeddings": True},
-)
-print("✅ Embedding model siap!")
+_embeddings = None
+_vectorstore = None
+
+
+def _get_embeddings():
+    """Lazy-load embedding model. Dipanggil sekali, lalu di-cache."""
+    global _embeddings
+    if _embeddings is None:
+        print("⏳ Memuat embedding model (hanya sekali)...")
+        _embeddings = HuggingFaceEmbeddings(
+            model_name=EMBEDDING_MODEL,
+            model_kwargs={"device": "cpu"},
+            encode_kwargs={"normalize_embeddings": True},
+        )
+        print("✅ Embedding model siap!")
+    return _embeddings
+
+
+def _get_vectorstore():
+    """Lazy-load vector store. Pakai yang sudah ada di disk, atau build baru."""
+    global _vectorstore
+    if _vectorstore is None:
+        emb = _get_embeddings()
+        if os.path.exists(CHROMA_DIR) and os.listdir(CHROMA_DIR):
+            print("📂 Memuat vector store dari disk...")
+            _vectorstore = Chroma(
+                persist_directory=CHROMA_DIR,
+                embedding_function=emb,
+            )
+        else:
+            print("🔨 Membangun vector store baru dari knowledge base...")
+            docs = load_documents()
+            if not docs:
+                raise FileNotFoundError("Tidak ada dokumen di folder knowledge/")
+            chunks = split_documents(docs)
+            _vectorstore = Chroma.from_documents(
+                documents=chunks,
+                embedding=emb,
+                persist_directory=CHROMA_DIR,
+            )
+            print(f"💾 Vector store tersimpan di: {CHROMA_DIR}")
+    return _vectorstore
 
 
 def load_documents():
@@ -93,44 +129,16 @@ def split_documents(docs):
     return chunks
 
 
-def build_vectorstore(chunks):
-    """Membuat / memperbarui ChromaDB vector store dari chunks"""
-    vectorstore = Chroma.from_documents(
-        documents=chunks,
-        embedding=embeddings,
-        persist_directory=CHROMA_DIR,
-    )
-    print(f"💾 Vector store tersimpan di: {CHROMA_DIR}")
-    return vectorstore
-
-
-def get_vectorstore():
-    """Ambil vector store yang sudah ada, atau buat baru jika belum ada"""
-    if os.path.exists(CHROMA_DIR) and os.listdir(CHROMA_DIR):
-        print("📂 Memuat vector store yang sudah ada...")
-        vectorstore = Chroma(
-            persist_directory=CHROMA_DIR,
-            embedding_function=embeddings,
-        )
-        return vectorstore
-    else:
-        print("🔨 Membangun vector store baru dari knowledge base...")
-        docs = load_documents()
-        if not docs:
-            raise FileNotFoundError("Tidak ada dokumen di folder knowledge/")
-        chunks = split_documents(docs)
-        return build_vectorstore(chunks)
-
-
 def rebuild_vectorstore():
-    """Rebuild vector store secara aman tanpa menghapus folder (bebas Windows PermissionError)"""
+    """Rebuild vector store secara aman (untuk admin/manual refresh)."""
+    global _vectorstore
+    emb = _get_embeddings()
     docs = load_documents()
     if not docs:
         raise FileNotFoundError("Tidak ada dokumen di folder knowledge/")
     chunks = split_documents(docs)
 
-    # Inisialisasi Chroma
-    vs = Chroma(persist_directory=CHROMA_DIR, embedding_function=embeddings)
+    vs = Chroma(persist_directory=CHROMA_DIR, embedding_function=emb)
     try:
         col_data = vs._collection.get()
         if col_data and "ids" in col_data and col_data["ids"]:
@@ -139,19 +147,13 @@ def rebuild_vectorstore():
     except Exception as e:
         print(f"⚠️ Warning membersihkan collection lama: {e}")
 
-    vs = Chroma.from_documents(
+    _vectorstore = Chroma.from_documents(
         documents=chunks,
-        embedding=embeddings,
+        embedding=emb,
         persist_directory=CHROMA_DIR,
     )
-    print(f"💾 Vector store berhasil di-rebuild ({vs._collection.count()} chunks) di: {CHROMA_DIR}")
-    return vs
-
-
-# ──────────────────────────────────────────────
-# 4. Inisialisasi Vector Store (load dari disk jika ada)
-# ──────────────────────────────────────────────
-vectorstore = get_vectorstore()
+    print(f"💾 Vector store berhasil di-rebuild ({_vectorstore._collection.count()} chunks) di: {CHROMA_DIR}")
+    return _vectorstore
 
 
 
@@ -164,7 +166,7 @@ def semantic_search(query, k=TOP_K):
     Mengembalikan list of (Document, score).
     Score = jarak (distance) — makin kecil makin relevan.
     """
-    results = vectorstore.similarity_search_with_relevance_scores(query, k=k)
+    results = _get_vectorstore().similarity_search_with_relevance_scores(query, k=k)
     return results
 
 
@@ -437,42 +439,46 @@ Konfirmasikan dengan gembira bahwa tanggal {avail_res.get('date_formatted')} mas
     # --- System Prompt dengan Alur 3-Filter Sales Funnel ---
     system_prompt = f"""Kamu adalah asisten virtual resmi & admin sales utama dari "Sebelas Decor" (jasa dekorasi event: pernikahan/wedding & lamaran/engagement).
 
-SISTEM PENALARAN & ALUR FILTER PELANGGAN (3 FILTER WAJIB):
-Sebelas Decor memiliki 4 KATEGORI PAKET PRICELIST UTAMA di dalam file PDF Google Drive:
-1. 💒 **Wedding Gedung** (Pernikahan di Gedung/Ballroom/Hotel/Hall/Masjid)
-2. 🏡 **Wedding Rumah** (Pernikahan di Rumah/Halaman/Garasi/Outdoor Kediaman)
-3. 💍 **Engagement Gedung** (Lamaran di Gedung/Resto/Hotel Function Room)
-4. 🏠 **Engagement Rumah** (Lamaran di Rumah/Kediaman)
+SISTEM 3-FILTER SALES FUNNEL:
+Sebelas Decor memiliki 4 KATEGORI PAKET yang masing-masing punya pricelist tersendiri:
+1. 💒 **Wedding Gedung** — Pernikahan di Gedung/Ballroom/Hotel/Hall/Masjid
+2. 🏡 **Wedding Rumah** — Pernikahan di Rumah/Halaman/Garasi/Outdoor Kediaman
+3. 💍 **Engagement Gedung** — Lamaran di Gedung/Resto/Hotel Function Room
+4. 🏠 **Engagement Rumah** — Lamaran di Rumah/Kediaman
 
-ALUR INTERAKSI PERCAKAPAN:
+ALUR INTERAKSI PERCAKAPAN (WAJIB DIIKUTI SECARA BERURUTAN):
 
-1. JIKA KLIEN MEMINTA PRICELIST ATAU BERTANYA HARGA / DEKORASI:
-   - Sambut dengan sangat hangat dan ramah.
-   - WAJIB Berikan link resmi Google Drive PDF Pricelist & Katalog Lengkap Sebelas Decor:
-     📄 **Katalog & Pricelist Lengkap Sebelas Decor**:
-     https://drive.google.com/file/d/1TKXd4R10wQFI_BL9_Z4nD8iXiXsD9k7X/view?usp=drive_link
-   - Jelaskan bahwa pricelist lengkap untuk 4 kategori (Wedding Gedung, Wedding Rumah, Engagement Gedung, Engagement Rumah) tersedia lengkap di link Google Drive di atas.
-   - LALU TANYAKAN 3 DETAIL INI KEPADA KLIEN agar tim bisa mengecek ketersediaan tanggal & promo khusus:
-     1) 📅 **Tanggal Berapa** rencana acaranya?
+TAHAP 1 — PENGUMPULAN DATA (JANGAN KIRIM PRICELIST DULU!):
+   Jika klien baru menyapa, bertanya tentang dekorasi, atau meminta pricelist:
+   - Sambut dengan hangat dan ramah.
+   - Sampaikan bahwa kamu perlu mengetahui beberapa detail dulu agar bisa memberikan pricelist yang paling sesuai.
+   - JANGAN berikan link pricelist sebelum 3 detail berikut terkumpul! Tanyakan:
+     1) 📅 **Tanggal berapa** rencana acaranya?
      2) 💒 Acaranya untuk **Pernikahan (Wedding)** atau **Lamaran (Engagement)**?
      3) 🏛️ Lokasi tempat acaranya di **Gedung/Hotel** atau di **Rumah**?
+   - Jika klien hanya menjawab sebagian, tanyakan detail yang belum dijawab dengan sopan.
 
-2. JIKA KLIEN MENJAWAB / MENYEBUTKAN DETAIL ACARA:
+TAHAP 2 — KIRIM PRICELIST SPESIFIK (SETELAH 3 DATA LENGKAP):
+   Setelah ketiga detail di atas sudah terkumpul dari percakapan:
    - Perhatikan info ketersediaan tanggal dari database di bawah. Jika tanggal SUDAH PENUH, sampaikan maaf dan tawarkan opsi tanggal lain. Jika MASIH TERSEDIA, konfirmasikan dengan gembira.
-   - Ingatkan kembali link Google Drive PDF Pricelist: https://drive.google.com/file/d/1TKXd4R10wQFI_BL9_Z4nD8iXiXsD9k7X/view?usp=drive_link
-   - WAJIB TAMPILKAN BROSUR FOTO PROMO SESUAI ACARA KLIEN:
-     • Untuk acara WEDDING / PERNIKAHAN:
+   - Kirim link Google Drive PDF Pricelist yang SESUAI KATEGORI klien:
+     📄 **Pricelist [KATEGORI] Sebelas Decor**:
+     https://drive.google.com/file/d/1TKXd4R10wQFI_BL9_Z4nD8iXiXsD9k7X/view?usp=drive_link
+     (Ganti [KATEGORI] dengan: Wedding Gedung / Wedding Rumah / Engagement Gedung / Engagement Rumah sesuai jawaban klien.)
+   - WAJIB TAMPILKAN BROSUR PROMO SESUAI ACARA KLIEN:
+     • Untuk WEDDING / PERNIKAHAN:
        ![Promo Wedding](/static/images/promo_wedding.png)
-     • Untuk acara ENGAGEMENT / LAMARAN:
+     • Untuk ENGAGEMENT / LAMARAN:
        ![Promo Engagement](/static/images/promo_engagement.png)
-   - Tawarkan konsultasi desain & penyesuaian tema gratis (Rustic Minimalist, Modern Elegant, Traditional Jawa, Glamour Gold, Boho Chic).
+   - Tawarkan konsultasi desain & penyesuaian tema gratis.
 
 {availability_context}
 
 ATURAN PENTING:
-- Setiap kali membahas pricelist atau harga, WAJIB sertakan link Google Drive: https://drive.google.com/file/d/1TKXd4R10wQFI_BL9_Z4nD8iXiXsD9k7X/view?usp=drive_link
+- DILARANG memberikan link pricelist sebelum 3 detail (tanggal, jenis acara, tipe venue) terkumpul!
 - DILARANG KERAS menyarankan hubungi admin via WhatsApp karena KAMU ADALAH admin utama di chat ini!
-- Gunakan bahasa Indonesia yang sopan, ramah, dan komunikatif."""
+- Gunakan bahasa Indonesia yang sopan, ramah, dan komunikatif.
+- Jawab dengan singkat dan tidak bertele-tele (maksimal 150 kata)."""
 
 
     # --- User Prompt ---
@@ -484,7 +490,7 @@ ATURAN PENTING:
 PERTANYAAN PELANGGAN:
 {user_message}
 
-INSTRUKSI: Jawab pelanggan sebagai admin Sebelas Decor mengikuti alur 3-Filter Sales Funnel (Tanggal, Wedding/Engagement, Gedung/Rumah) di atas!"""
+INSTRUKSI: Jawab pelanggan sebagai admin Sebelas Decor. Ikuti alur 3-Filter Sales Funnel secara berurutan. JANGAN kirim pricelist sebelum 3 detail (tanggal, jenis acara, tipe venue) terkumpul!"""
 
     # --- Panggil MiMo API dengan history ---
     answer = call_mimo_api(system_prompt, user_prompt, history=history)

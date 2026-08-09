@@ -13,12 +13,27 @@ from db_client import save_lead, get_recent_leads, extract_lead_from_text
 
 from flask import Flask, request, jsonify, send_from_directory
 import os
+import threading
 
 # ──────────────────────────────────────────────
 # Inisialisasi Flask App
 # ──────────────────────────────────────────────
 app = Flask(__name__, static_folder="static", static_url_path="/static")
 CORS(app)  # Izinkan CORS dari frontend
+
+
+# ──────────────────────────────────────────────
+# Pre-warm: Load embedding model + vectorstore di background thread
+# agar request pertama user tidak menunggu 16-30 detik.
+# ──────────────────────────────────────────────
+def _warmup():
+    from rag_engine import _get_vectorstore
+    print("🔥 Pre-warming embedding model & vector store...")
+    _get_vectorstore()
+    print("✅ Pre-warm selesai! Server siap menerima request.")
+
+_warmup_thread = threading.Thread(target=_warmup, daemon=True)
+_warmup_thread.start()
 
 
 # ──────────────────────────────────────────────
