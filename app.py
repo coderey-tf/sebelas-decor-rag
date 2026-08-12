@@ -1,6 +1,6 @@
 """
-app.py — Flask Server untuk Sebelas Decor RAG Chatbot
-=====================================================
+app.py — Flask Server untuk Sebelas Decor Chatbot
+==================================================
 Endpoint: POST /api/chat
 Body: {"message": "pertanyaan user"}
 Response: {"reply": "jawaban bot"}
@@ -8,12 +8,17 @@ Response: {"reply": "jawaban bot"}
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from rag_engine import query_rag
+
+# ── Rule-Based Engine (aktif) ──
+from chat_engine import handle_chat
+
+# ── RAG Engine (dinonaktifkan, simpan untuk pengembangan nanti) ──
+# from rag_engine import query_rag
+
 from db_client import save_lead, get_recent_leads, extract_lead_from_text
 
 from flask import Flask, request, jsonify, send_from_directory
 import os
-import threading
 
 # ──────────────────────────────────────────────
 # Inisialisasi Flask App
@@ -35,17 +40,18 @@ def add_charset_header(response):
 
 
 # ──────────────────────────────────────────────
-# Pre-warm: Load embedding model + vectorstore di background thread
-# agar request pertama user tidak menunggu 16-30 detik.
+# Pre-warm: DINONAKTIFKAN (tidak perlu untuk rule-based engine)
+# Aktifkan kembali jika menggunakan RAG engine.
 # ──────────────────────────────────────────────
-def _warmup():
-    from rag_engine import _get_vectorstore
-    print("🔥 Pre-warming embedding model & vector store...")
-    _get_vectorstore()
-    print("✅ Pre-warm selesai! Server siap menerima request.")
-
-_warmup_thread = threading.Thread(target=_warmup, daemon=True)
-_warmup_thread.start()
+# import threading
+# def _warmup():
+#     from rag_engine import _get_vectorstore
+#     print("🔥 Pre-warming embedding model & vector store...")
+#     _get_vectorstore()
+#     print("✅ Pre-warm selesai! Server siap menerima request.")
+#
+# _warmup_thread = threading.Thread(target=_warmup, daemon=True)
+# _warmup_thread.start()
 
 
 # ──────────────────────────────────────────────
@@ -56,8 +62,9 @@ def index():
     """Health check endpoint"""
     return jsonify({
         "status": "ok",
-        "service": "Sebelas Decor RAG Chatbot API & Database Service",
-        "version": "1.1.0",
+        "service": "Sebelas Decor Chatbot API & Database Service",
+        "version": "2.0.0",
+        "engine": "rule-based (lead collector)",
         "database": "PostgreSQL (Supabase)",
         "endpoints": {
             "chat": "POST /api/chat",
@@ -90,6 +97,8 @@ def chat():
       - reply (str): balasan chatbot
       - leadSaved (bool): apakah lead baru berhasil disimpan
       - leadData (dict): data lead yang terkumpul sejauh ini
+      - autoReply (bool): apakah bot harus auto-reply
+      - handoverToAdmin (bool): apakah handover ke admin
     """
     try:
         data = request.get_json()
@@ -97,87 +106,36 @@ def chat():
         if not data or "message" not in data:
             return jsonify({
                 "error": "Format tidak valid. Kirim JSON dengan key 'message'.",
-                "example": {"message": "Berapa harga paket Indoor Basic?"}
+                "example": {"message": "Halo, mau tanya pricelist dong"}
             }), 400
 
         user_message = data["message"].strip()
         history = data.get("history", [])
-        customer_name = data.get("customerName")  # Dari Meta Cloud API: wa_profile_name
         phone_input = data.get("phone")            # Dari Meta Cloud API: wa_id
         source = data.get("source", "chatbot_web")
 
         if not user_message:
             return jsonify({
-                "reply": "Halo! Ada yang bisa Sebelas Decor bantu? 😊"
-            })
-
-        # ── 1. Cek Kunci Unik WhatsApp (phone / wa_id) di DB ──
-        from db_client import get_lead_by_phone, extract_lead_from_conversation
-        
-        # Ekstrak No HP (Unique Key) dari input Meta API atau teks chat
-        lead_info_pre = extract_lead_from_conversation(
-            current_message=user_message,
-            history=history,
-            wa_name=customer_name,
-            wa_phone=phone_input,
-        )
-        phone = phone_input or lead_info_pre.get("phone")
-
-        # Cek apakah lead dengan nomor HP ini sudah ada di DB
-        existing_lead = get_lead_by_phone(phone) if phone else None
-
-        # Jika lead SUDAH ADA di database (data sudah di-capture) -> Chatbot TIDAK REPLY (Admin yang meneruskan)
-        if existing_lead:
-            return jsonify({
-                "reply": "",
-                "autoReply": False,
-                "handoverToAdmin": True,
+                "reply": "Halo! Ada yang bisa Sebelas Decor bantu? 😊",
+                "autoReply": True,
+                "handoverToAdmin": False,
                 "leadSaved": False,
-                "leadData": existing_lead
+                "leadData": {},
             })
 
-        # Panggil RAG engine dengan history & phone
-        reply = query_rag(user_message, history=history, phone=phone)
+        # ── Rule-Based Engine ──
+        result = handle_chat(
+            user_message=user_message,
+            history=history,
+            phone=phone_input,
+            source=source,
+        )
 
-        # ── 2. Akumulasi data lead dari seluruh percakapan ──
-        lead_info = lead_info_pre
+        return jsonify(result)
 
-        lead_saved = False
-
-        # Auto-upsert lead ke database saat 4 filter lengkap
-        if lead_info.get("is_complete"):
-            # Tentukan nama pelanggan
-            name = lead_info.get("customer_name")
-            if not name:
-                phone_display = lead_info.get("phone", "Anonim")
-                name = f"Pelanggan Chatbot ({phone_display})"
-
-            result = save_lead(
-                customer_name=name,
-                phone=lead_info.get("phone"),
-                event_date=lead_info.get("event_date"),
-                location=lead_info.get("location"),
-                event_type=lead_info.get("event_type", "Other"),
-                package=lead_info.get("package"),  # e.g. "Wedding Gedung"
-                status="Inquiry",
-                notes=f"Auto-captured via {source}. Filter: {lead_info.get('package', '-')}, Tanggal: {lead_info.get('event_date', '-')}",
-                source=source,
-            )
-            if "error" not in result:
-                lead_saved = True
-
-        return jsonify({
-            "reply": reply,
-            "leadSaved": lead_saved,
-            "leadData": {
-                "event_type": lead_info.get("event_type"),
-                "venue_type": lead_info.get("venue_type"),
-                "event_date": lead_info.get("event_date"),
-                "package": lead_info.get("package"),
-                "location": lead_info.get("location"),
-                "is_complete": lead_info.get("is_complete", False),
-            }
-        })
+        # ── RAG Engine (dinonaktifkan) ──
+        # reply = query_rag(user_message, history=history, phone=phone_input)
+        # return jsonify({"reply": reply})
 
     except Exception as e:
         print(f"❌ Error di /api/chat: {e}")
@@ -227,10 +185,11 @@ def create_lead_api():
 # ──────────────────────────────────────────────
 if __name__ == "__main__":
     print("\n" + "=" * 50)
-    print("🌸 Sebelas Decor — RAG Chatbot API Server")
+    print("🌸 Sebelas Decor — Chatbot API Server (Rule-Based)")
     print("=" * 50)
     print("📡 Server berjalan di: http://127.0.0.1:5000")
     print("📮 Chat endpoint:      POST /api/chat")
+    print("🔧 Engine:             Rule-Based Lead Collector")
     print("=" * 50 + "\n")
 
     app.run(host="127.0.0.1", port=5000, debug=True)
